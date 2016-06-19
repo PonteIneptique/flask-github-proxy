@@ -1,5 +1,6 @@
 from flask_github import GitHub
 from flask import Flask, Blueprint, request, jsonify
+from tests.github import github_api
 from copy import deepcopy
 from hashlib import sha256
 import datetime
