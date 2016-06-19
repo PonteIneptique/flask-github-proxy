@@ -1,4 +1,5 @@
 from flask import Flask, jsonify, request
+import base64
 
 github_api = Flask("app")
 github_api.secret_id = "secret-id"
@@ -18,24 +19,47 @@ def check_secret(response):
     return response
 
 
-@github_api.route("/repos/<owner>/<repo>/contents/<path:file>")
+@github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["GET"])
 def check_file(owner, repo, file):
+    if request.args.get("error"):
+        resp = jsonify({
+              "message": "Not Found",
+              "documentation_url": "https://developer.github.com/v3"
+            }
+        )
+        resp.status_code = 404
+        return resp
+    sha = "123456"
     model = {
         "type": "file",
         "encoding": "base64",
         "size": 5362,
-        "name": "README.md",
-        "path": "README.md",
-        "content": "encoded content ...",
-        "sha": "3d21ec53a331a6f037a91c368710b99387d012c1",
-        "url": "https://api.github.com/repos/octokit/octokit.rb/contents/README.md",
-        "git_url": "https://api.github.com/repos/octokit/octokit.rb/git/blobs/3d21ec53a331a6f037a91c368710b99387d012c1",
-        "html_url": "https://github.com/octokit/octokit.rb/blob/master/README.md",
-        "download_url": "https://raw.githubusercontent.com/octokit/octokit.rb/master/README.md",
+        "name": file.split("/")[-1],
+        "path": file,
+        "content": base64.b64encode("encoded content ..."),
+        "sha": sha,
+        "url": "https://api.github.com/repos/{owner}/{repo}/contents/{path}".format(
+            owner=owner, repo=repo, path=file
+        ),
+        "git_url": "https://api.github.com/repos/{owner}/{repo}/git/blobs/{sha}".format(
+            owner=owner, repo=repo, sha=sha
+        ),
+        "html_url": "https://github.com/octokit/{owner}/{repo}/master/{path}".format(
+            owner=owner, repo=repo, path=file
+        ),
+        "download_url": "https://raw.githubusercontent.com/{owner}/{repo}/master/{path}".format(
+            owner=owner, repo=repo, path=file
+        ),
         "_links": {
-            "git": "https://api.github.com/repos/octokit/octokit.rb/git/blobs/3d21ec53a331a6f037a91c368710b99387d012c1",
-            "self": "https://api.github.com/repos/octokit/octokit.rb/contents/README.md",
-            "html": "https://github.com/octokit/octokit.rb/blob/master/README.md"
+            "git": "https://api.github.com/repos/{owner}/{repo}/git/blobs/{sha}".format(
+                owner=owner, repo=repo, sha=sha
+            ),
+            "self": "https://api.github.com/repos/{owner}/{repo}/contents/{path}".format(
+                owner=owner, repo=repo, path=file
+            ),
+                "html": "https://github.com/{owner}/{repo}/blob/master/{path}".format(
+                owner=owner, repo=repo, path=file
+            )
         }
     }
     return check_secret(jsonify(model))

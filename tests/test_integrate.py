@@ -7,6 +7,7 @@ from flask import Flask
 import mock
 from io import BytesIO
 from hashlib import sha256
+from .github import github_api
 
 
 def make_secret(data, secret):

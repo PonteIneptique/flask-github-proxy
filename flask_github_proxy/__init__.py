@@ -1,9 +1,29 @@
 from flask_github import GitHub
 from flask import Flask, Blueprint, request, jsonify
-from tests.github import github_api
 from copy import deepcopy
 from hashlib import sha256
 import datetime
+import base64
+
+
+class Author(object):
+    def __init__(self, name, email):
+        self.__name__ = name
+        self.__email__ = email
+
+    @property
+    def name(self):
+        return self.__name__
+
+    @property
+    def email(self):
+        return self.__email__
+
+    def dict(self):
+        return {
+            "name": self.name,
+            "email": self.email
+        }
 
 
 class File(object):
@@ -60,6 +80,9 @@ class File(object):
         }
         return params
 
+    def base64(self):
+        return base64.encode(self.content.read())
+
 
 class GithubProxy(GitHub):
     """ Provides routes to push files to github and open pull request as a service
@@ -75,7 +98,12 @@ class GithubProxy(GitHub):
         ("/push/<path:filename>", "r_receive", ["POST"])
     ]
 
-    def __init__(self, prefix, source_repo, target_repo, secret, app=None, default_author="Anonymous"):
+    DEFAULT_AUTHOR = Author(
+        "Github Proxy",
+        "anonymous@github.com"
+    )
+
+    def __init__(self, prefix, source_repo, target_repo, secret, app=None, default_author=None):
         self.__blueprint__ = None
         self.__prefix__ = prefix
         self.__name__ = prefix.replace("/", "_").replace(".", "_")
@@ -84,6 +112,8 @@ class GithubProxy(GitHub):
         self.__secret__ = secret
         self.__urls__ = deepcopy(type(self).URLS)
         self.__default_author__ = default_author
+        if not default_author:
+            self.__default_author__ = GithubProxy.DEFAULT_AUTHOR
 
         if app is not None:
             self.app = app
@@ -145,6 +175,17 @@ class GithubProxy(GitHub):
         self.app = self.app.register_blueprint(self.blueprint)
 
         return self.blueprint
+
+    def push(self, file):
+        self.put(
+            "/api",
+            **{
+                "message": file.message,
+                "author": file.author.dict(),
+                "content": file.base64
+            }
+
+        )
 
     def r_receive(self, filename):
         """ Function which receives the data from Perseids
