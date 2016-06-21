@@ -7,7 +7,7 @@ from flask import Flask
 import mock
 from io import BytesIO
 from hashlib import sha256
-from .github import github_api
+from github import make_client
 
 
 def make_secret(data, secret):
@@ -19,16 +19,33 @@ class TestIntegration(TestCase):
     def setUp(self):
         self.app = Flask("name")
         self.secret = "14m3s3cr3t"
-        self.app.config["GITHUB_CLIENT_ID"] = "client-id"
-        self.app.config["GITHUB_CLIENT_SECRET"] = "client-secret"
         self.proxy = GithubProxy(
             "/perseids",
             "ponteineptique/dummy",
             "perseusDL/dummy",
+            github_id="client-id",
+            github_secret="client-secret",
             secret=self.secret,
             app=self.app
         )
+        self.calls = []
+        self.proxy.github_api_url = ""
         self.client = self.app.test_client()
+        self.github_api = make_client("client-id", "client-secret").test_client()
+
+        def make_request(method, url, **kwargs):
+            self.calls.append((method, url, kwargs))
+            return getattr(self.github_api, method.lower())(url, **kwargs)
+
+        self.patcher = mock.patch(
+            "flask_github_proxy.make_request",
+            make_request
+        )
+        self.mock = self.patcher.start()
+
+    def tearDown(self):
+        self.calls = []
+        self.patcher.stop()
 
     def makeRequest(self, content, data):
         return self.client.post(
@@ -48,4 +65,5 @@ class TestIntegration(TestCase):
                 "sha": make_secret("Some content", self.secret)
             }
         )
-        print(data.data)
+        print(self.calls)
+        self.assertEqual(data, [])

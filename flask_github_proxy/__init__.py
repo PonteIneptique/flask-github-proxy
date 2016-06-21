@@ -1,9 +1,10 @@
-from flask_github import GitHub
 from flask import Flask, Blueprint, request, jsonify
 from copy import deepcopy
 from hashlib import sha256
 import datetime
 import base64
+import json
+from requests import request as make_request
 
 
 class Author(object):
@@ -42,6 +43,7 @@ class File(object):
         self.__author__ = author
         self.__date__ = date
         self.__logs__ = logs
+        self.blob = None
 
     @property
     def path(self):
@@ -81,10 +83,10 @@ class File(object):
         return params
 
     def base64(self):
-        return base64.encode(self.content.read())
+        return base64.encodebytes(self.content.read()).decode("utf-8")
 
 
-class GithubProxy(GitHub):
+class GithubProxy(object):
     """ Provides routes to push files to github and open pull request as a service
 
     :param path: URI Prefix (Has to start with "/")
@@ -103,7 +105,12 @@ class GithubProxy(GitHub):
         "anonymous@github.com"
     )
 
-    def __init__(self, prefix, source_repo, target_repo, secret, app=None, default_author=None):
+    def __init__(self,
+                 prefix, source_repo, target_repo,
+                 secret,
+                 github_secret, github_id,
+                 app=None, default_author=None):
+
         self.__blueprint__ = None
         self.__prefix__ = prefix
         self.__name__ = prefix.replace("/", "_").replace(".", "_")
@@ -112,6 +119,10 @@ class GithubProxy(GitHub):
         self.__secret__ = secret
         self.__urls__ = deepcopy(type(self).URLS)
         self.__default_author__ = default_author
+
+        self.github_secret = github_secret
+        self.github_id = github_id
+        self.github_api_url = "https://api.github.com"
         if not default_author:
             self.__default_author__ = GithubProxy.DEFAULT_AUTHOR
 
@@ -120,6 +131,20 @@ class GithubProxy(GitHub):
             self.init_app(self.app)
         else:
             self.app = None
+
+    def request(self, method, url, **kwargs):
+        if "?" in url:
+            url += "&client_id={id}&client_secret={secret}"
+        else:
+            url += "?client_id={id}&client_secret={secret}"
+        return make_request(
+            method,
+            url.format(
+                id=self.github_id,
+                secret=self.github_secret
+            ),
+            **kwargs
+        )
 
     @property
     def secret(self):
@@ -157,7 +182,6 @@ class GithubProxy(GitHub):
         :return: Blueprint of the current nemo app
         :rtype: flask.Blueprint
         """
-        super(GithubProxy, self).init_app(app)
         self.__blueprint__ = Blueprint(
             self.__name__,
             self.__name__,
@@ -171,21 +195,57 @@ class GithubProxy(GitHub):
                 endpoint=name.replace("r_", ""),
                 methods=methods
             )
-            print(url)
         self.app = self.app.register_blueprint(self.blueprint)
 
         return self.blueprint
 
     def push(self, file):
-        self.put(
-            "/api",
-            **{
-                "message": file.message,
+        data = self.request(
+            "PUT",
+            "{api}/repos/{source_repo}/contents/{path}".format(
+                api=self.github_api_url,
+                source_repo=self.source_repo,
+                path=file.path
+            ),
+            data=json.dumps({
+                "message": file.logs,
                 "author": file.author.dict(),
-                "content": file.base64
-            }
-
+                "content": file.base64()
+            })
         )
+        return json.loads(data.data.decode("utf-8"))
+
+    def get(self, file):
+        data = self.request(
+            "GET",
+            "{api}/repos/{source_repo}/contents/{path}".format(
+                api=self.github_api_url,
+                source_repo=self.source_repo,
+                path=file.path
+            )
+        )
+        # We update the file blob because it exists and we need it for update
+        if data.status_code == 200:
+            reply = json.loads(data.data.decode("utf-8"))
+            file.blob = reply["sha"]
+
+        return data
+
+    def update(self, file):
+        data = self.request(
+            "PUT",
+            "{api}/repos/{source_repo}/contents/{path}".format(
+                api=self.github_api_url,
+                source_repo=self.source_repo,
+                path=file.path
+            ),
+            data=json.dumps({
+                "message": file.logs,
+                "author": file.author.dict(),
+                "content": file.base64()
+            })
+        )
+        return json.loads(data.data.decode("utf-8"))
 
     def r_receive(self, filename):
         """ Function which receives the data from Perseids
@@ -200,7 +260,14 @@ class GithubProxy(GitHub):
         :return:
         """
         content = request.files['content']
-        author = request.args.get("author", self.default_author)
+        author = request.args.get("author", None)
+        if not author:
+            author = self.default_author
+        else:
+            author = author.split("/")
+            if len(author) < 2:
+                author.append(self.default_author.email)
+            author = Author(*author)
         date = request.args.get("date", datetime.datetime.now().date().isoformat())
         logs = request.args.get("logs", "{} updated {}".format(author, filename))
         secure_sha = request.args.get("sha")
@@ -222,5 +289,21 @@ class GithubProxy(GitHub):
             resp = jsonify({"error": "Hash does not correspond with content"})
             resp.status_code = 300
             return resp
+
+        _get = self.get(file)
+        if _get.status_code != 200:
+            data = json.loads(_get.data.decode("utf-8"))
+            resp = jsonify({
+                "status": "error",
+                "message": data["message"]
+            })
+            resp.status_code = _get.status_code
+            return resp
+        file_exists = _get.status_code == 200
+        if file_exists:
+            file_commit = self.update(file)
+        else:
+            # We create
+            file_commit = self.push(file)
 
         return jsonify(file.dict())
