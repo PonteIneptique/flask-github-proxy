@@ -80,6 +80,7 @@ class File(object):
                 "logs", "date", "author", "sha", "path"
             ]
         }
+        params["author"] = params["author"].dict()
         return params
 
     def base64(self):
@@ -133,16 +134,14 @@ class GithubProxy(object):
             self.app = None
 
     def request(self, method, url, **kwargs):
-        if "?" in url:
-            url += "&client_id={id}&client_secret={secret}"
-        else:
-            url += "?client_id={id}&client_secret={secret}"
+        if "params" not in kwargs:
+            kwargs["params"] = {}
+        kwargs["params"]["client_id"] = self.github_id
+        kwargs["params"]["client_secret"] = self.github_secret
+
         return make_request(
             method,
-            url.format(
-                id=self.github_id,
-                secret=self.github_secret
-            ),
+            url,
             **kwargs
         )
 
@@ -199,7 +198,7 @@ class GithubProxy(object):
 
         return self.blueprint
 
-    def push(self, file):
+    def put(self, file):
         data = self.request(
             "PUT",
             "{api}/repos/{source_repo}/contents/{path}".format(
@@ -233,7 +232,7 @@ class GithubProxy(object):
 
     def update(self, file):
         data = self.request(
-            "PUT",
+            "POST",
             "{api}/repos/{source_repo}/contents/{path}".format(
                 api=self.github_api_url,
                 source_repo=self.source_repo,
@@ -242,7 +241,8 @@ class GithubProxy(object):
             data=json.dumps({
                 "message": file.logs,
                 "author": file.author.dict(),
-                "content": file.base64()
+                "content": file.base64(),
+                "blob": file.blob
             })
         )
         return json.loads(data.data.decode("utf-8"))
@@ -291,7 +291,7 @@ class GithubProxy(object):
             return resp
 
         _get = self.get(file)
-        if _get.status_code != 200:
+        if _get.status_code not in (200, 404):
             data = json.loads(_get.data.decode("utf-8"))
             resp = jsonify({
                 "status": "error",
@@ -299,11 +299,12 @@ class GithubProxy(object):
             })
             resp.status_code = _get.status_code
             return resp
+
         file_exists = _get.status_code == 200
         if file_exists:
             file_commit = self.update(file)
         else:
             # We create
-            file_commit = self.push(file)
+            file_commit = self.put(file)
 
         return jsonify(file.dict())

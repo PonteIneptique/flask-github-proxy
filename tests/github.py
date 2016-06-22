@@ -2,15 +2,17 @@ from flask import Flask, jsonify, request
 import base64
 
 
-def make_client(gitid, gitsec):
+def make_client(gitid, gitsec, route_fail=None):
     github_api = Flask("app")
     github_api.secret_id = gitsec
     github_api.client_id = gitid
+    github_api.route_fail = route_fail
+    if not route_fail:
+        github_api.route_fail = {}
 
     def check_secret(response):
         if request.args.get("client_id") != github_api.client_id \
                 or request.args.get("client_secret") != github_api.secret_id:
-            print(github_api.client_id, github_api.secret_id)
             response = jsonify(
                 {
                     "message": "Bad credentials",
@@ -20,9 +22,29 @@ def make_client(gitid, gitsec):
             response.status_code = 401
         return response
 
+    @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["POST"])
+    def put_file(owner, repo, file):
+        resp = jsonify({
+                "message": "Not Found",
+                "documentation_url": "https://developer.github.com/v3"
+            }
+        )
+        resp.status_code = 404
+        return resp
+
+    @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["PUT"])
+    def update_file(owner, repo, file):
+        resp = jsonify({
+                "message": "Not Found",
+                "documentation_url": "https://developer.github.com/v3"
+            }
+        )
+        resp.status_code = 404
+        return resp
+
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["GET"])
     def check_file(owner, repo, file):
-        if request.args.get("error", False):
+        if request.url.split("?")[0] in github_api.route_fail.keys():
             resp = jsonify({
                     "message": "Not Found",
                     "documentation_url": "https://developer.github.com/v3"
