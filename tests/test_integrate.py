@@ -79,6 +79,7 @@ class TestIntegration(TestCase):
                 "author": "ponteineptique",
                 "date": "19/06/2016",
                 "logs": "Hard work of transcribing file",
+                "branch": "uuid-1234",
                 "sha": make_secret("Some content", self.secret)
             }
         )
@@ -104,7 +105,7 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                # There should be a branch convention
+                "branch": "uuid-1234"
             },
             put_data
         )
@@ -116,6 +117,7 @@ class TestIntegration(TestCase):
                 "author": "ponteineptique",
                 "date": "19/06/2016",
                 "logs": "Hard work of transcribing file",
+                "branch": "uuid-1234",
                 "sha": make_secret("Some content", self.secret)
             }
         )
@@ -141,7 +143,8 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                "blob": "123456"
+                "sha": "123456",
+                "branch": "uuid-1234"
                 # There should be a branch convention
             },
             put_data

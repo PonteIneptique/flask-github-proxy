@@ -1,90 +1,9 @@
-from flask import Flask, Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify
 from copy import deepcopy
-from hashlib import sha256
 import datetime
-import base64
 import json
 from requests import request as make_request
-
-
-class Author(object):
-    def __init__(self, name, email):
-        self.__name__ = name
-        self.__email__ = email
-
-    @property
-    def name(self):
-        return self.__name__
-
-    @property
-    def email(self):
-        return self.__email__
-
-    def dict(self):
-        return {
-            "name": self.name,
-            "email": self.email
-        }
-
-
-class File(object):
-    """
-
-    :param path:
-    :param content:
-    :param author:
-    :param date:
-    :param logs:
-    :return:
-    """
-    def __init__(self, path, content, author, date, logs):
-        self.__path__ = path
-        self.__content__ = content
-        self.__author__ = author
-        self.__date__ = date
-        self.__logs__ = logs
-        self.blob = None
-
-    @property
-    def path(self):
-        return self.__path__
-
-    @property
-    def content(self):
-        return self.__content__
-
-    @property
-    def author(self):
-        return self.__author__
-
-    @property
-    def date(self):
-        return self.__date__
-
-    @property
-    def logs(self):
-        return self.__logs__
-
-    def sha_secret(self, secret):
-        if secret:
-            return sha256(self.content.read() + secret).hexdigest()
-
-    @property
-    def sha(self):
-        return sha256(self.content.read()).hexdigest()
-
-    def dict(self):
-        params = {
-            prop: getattr(self, prop)
-            for prop in [
-                "logs", "date", "author", "sha", "path"
-            ]
-        }
-        params["author"] = params["author"].dict()
-        return params
-
-    def base64(self):
-        return base64.encodebytes(self.content.read()).decode("utf-8")
+from flask_github_proxy.models import Author, File, ProxyError
 
 
 class GithubProxy(object):
@@ -106,10 +25,15 @@ class GithubProxy(object):
         "anonymous@github.com"
     )
 
+    class DEFAULT_BRANCH:
+        NO = -1
+        AUTO_SHA = 0
+
     def __init__(self,
                  prefix, source_repo, target_repo,
                  secret,
                  github_secret, github_id,
+                 default_branch=None, origin_branch=master,
                  app=None, default_author=None):
 
         self.__blueprint__ = None
@@ -120,6 +44,10 @@ class GithubProxy(object):
         self.__secret__ = secret
         self.__urls__ = deepcopy(type(self).URLS)
         self.__default_author__ = default_author
+        self.__default_branch__ = default_branch
+        self.origin_branch = origin_branch
+        if default_branch is None:
+            self.__default_branch__ = GithubProxy.DEFAULT_BRANCH.NO
 
         self.github_secret = github_secret
         self.github_id = github_id
@@ -148,6 +76,19 @@ class GithubProxy(object):
     @property
     def secret(self):
         return self.__secret__
+
+    def default_branch(self, file):
+        """ Decide the name of the default branch given the file and the configuration
+
+        :param file: File with informations about it
+        :return:
+        """
+        if isinstance(self.__default_branch__, str):
+            return self.__default_branch__
+        elif self.__default_branch__ == GithubProxy.DEFAULT_BRANCH.NO:
+            return None
+        else:
+            return file.sha
 
     @property
     def blueprint(self):
@@ -199,6 +140,11 @@ class GithubProxy(object):
         return self.blueprint
 
     def put(self, file):
+        """ Create a new file on github
+
+        :param file: File to create
+        :return: File or ProxyError
+        """
         data = self.request(
             "PUT",
             "{api}/repos/{source_repo}/contents/{path}".format(
@@ -209,28 +155,52 @@ class GithubProxy(object):
             data=json.dumps({
                 "message": file.logs,
                 "author": file.author.dict(),
-                "content": file.base64()
+                "content": file.base64(),
+                "branch": file.branch
             })
         )
-        return json.loads(data.data.decode("utf-8"))
+
+        if data.status_code == 200:
+            file.pushed = True
+            return file
+        else:
+            reply = json.loads(data.data.decode("utf-8"))
+            return ProxyError(data.status_code, reply["message"])
 
     def get(self, file):
+        """ Check on github if a file exists
+
+        :param file: File to check status of
+        :return: File with new information, including blob
+        """
         data = self.request(
             "GET",
             "{api}/repos/{source_repo}/contents/{path}".format(
                 api=self.github_api_url,
                 source_repo=self.source_repo,
                 path=file.path
-            )
+            ),
+            params={
+                "ref": file.branch
+            }
         )
         # We update the file blob because it exists and we need it for update
         if data.status_code == 200:
-            reply = json.loads(data.data.decode("utf-8"))
-            file.blob = reply["sha"]
-
-        return data
+            data = json.loads(data.data.decode("utf-8"))
+            file.blob = data["sha"]
+        elif data.status_code == 404:
+            pass
+        else:
+            data = json.loads(data.data.decode("utf-8"))
+            return ProxyError(data.status_code, data["message"])
+        return file
 
     def update(self, file):
+        """ Make an update query on Github API for given file
+
+        :param file: File to update, with its content
+        :return: File with new information, including success
+        """
         data = self.request(
             "POST",
             "{api}/repos/{source_repo}/contents/{path}".format(
@@ -242,23 +212,100 @@ class GithubProxy(object):
                 "message": file.logs,
                 "author": file.author.dict(),
                 "content": file.base64(),
-                "blob": file.blob
+                "sha": file.blob,
+                "branch": file.branch
             })
         )
-        return json.loads(data.data.decode("utf-8"))
+        if data.status_code == 200:
+            file.pushed = True
+            return file
+        else:
+            reply = json.loads(data.data.decode("utf-8"))
+            return ProxyError(data.status_code, reply["message"])
+
+    def pull_request(self, file):
+        pass
+
+    def get_ref(self, branch):
+        """ Check if a reference exists
+
+        :param branch: The branch to check if it exists
+        :return: Sha of the branch if it exists, False if it does not exist, ProxyError if it went wrong
+        """
+        data = self.request(
+            "GET",
+            "/{api}/{source_repo}/git/refs/heads/{branch}".format(
+                api=self.github_api_url,
+                source_repo=self.source_repo,
+                branch=branch
+            ),
+        )
+        if data.status_code == 200:
+            data = json.loads(data.data)
+            if isinstance(data, list):
+                # No addresses matches, we get search results which stars with {branch}
+                return False
+            #  Otherwise, we get one record
+            return data["sha"]
+        elif data.status_code == 404:
+            return False
+        else:
+            data = json.loads(data.data)
+            return ProxyError(data.status_code, data["message"])
+
+    def make_ref(self, branch):
+        """ Make a branch on github
+
+        :param branch: Name of the branch to create
+        :return: Sha of the branch or ProxyError
+        """
+        master_sha = self.get_ref(self.origin_branch)
+        if not isinstance(master_sha, str):
+            return ProxyError(
+                404,
+                "The default branch from which to checkout is either not available or does not exist"
+            )
+
+        data = self.request(
+            "POST",
+            "/{api}/{source_repo}/git/refs".format(
+                api=self.github_api_url,
+                source_repo=self.source_repo
+            ),
+            data=json.dumps({
+              "ref": "refs/heads/{branch}".format(branch=branch),
+              "sha": master_sha
+            })
+        )
+
+        if data.status_code == 200:
+            data = json.loads(data.data)
+            if isinstance(data, list):
+                # No addresses matches, we get search results which stars with {branch}
+                return False
+            #  Otherwise, we get one record
+            return data["sha"]
+        else:
+            data = json.loads(data.data)
+            return ProxyError(data.status_code, data["message"])
 
     def r_receive(self, filename):
         """ Function which receives the data from Perseids
 
+            - Check the branch does not exist
+            - Make the branch if needed
             - Receive PUT from Perseids
             - Check if content exist
             - Update/Create content
             - Open Pull Request
             - Return PR link to Perseids
 
-        :param path: Path for the file
+        :param filename: Path for the file
         :return:
         """
+        ###########################################
+        # Retrieving data
+        ###########################################
         content = request.files['content']
         author = request.args.get("author", None)
         if not author:
@@ -272,11 +319,14 @@ class GithubProxy(object):
         logs = request.args.get("logs", "{} updated {}".format(author, filename))
         secure_sha = request.args.get("sha")
 
+        # Content checking
         if not content:
-            resp = jsonify({"error": "Content is missing"})
-            resp.status_code = 300
-            return resp
+            error = ProxyError(300, "Content is missing")
+            return error.response()
 
+        ###########################################
+        # Setting up data
+        ###########################################
         file = File(
             path=filename,
             content=content,
@@ -284,27 +334,49 @@ class GithubProxy(object):
             date=date,
             logs=logs
         )
+        file.branch = request.args.get("branch", self.default_branch(file))
 
+        ###########################################
+        # Checking data security
+        ###########################################
         if not secure_sha or secure_sha != secure_sha:
-            resp = jsonify({"error": "Hash does not correspond with content"})
-            resp.status_code = 300
-            return resp
+            error = ProxyError(300, "Hash does not correspond with content")
+            return error.response()
 
-        _get = self.get(file)
-        if _get.status_code not in (200, 404):
-            data = json.loads(_get.data.decode("utf-8"))
-            resp = jsonify({
-                "status": "error",
-                "message": data["message"]
-            })
-            resp.status_code = _get.status_code
-            return resp
+        ###########################################
+        # Ensuring branch exists
+        ###########################################
+        branch_status = self.get_ref(file.branch)
 
-        file_exists = _get.status_code == 200
-        if file_exists:
-            file_commit = self.update(file)
+        if isinstance(branch_status, ProxyError):  # If we have an error from github API
+            return branch_status.response()
+        elif not branch_status:  # If it does not exist
+            # We create a branch
+            branch_status = self.make_ref(file.branch)
+            # If branch creation did not work
+            if isinstance(branch_status, ProxyError):
+                return branch_status.response()
+
+        ###########################################
+        # Pushing files
+        ###########################################
+        # Check if file exists
+        # It feeds file.blob parameter, which tells us the sha of the file if it exists
+        file = self.get(file)
+        if isinstance(file, ProxyError):  # If we have an error from github API
+            return file.response()
+
+        # If it has a blob set up, it means we can update given file
+        if file.blob:
+            file = self.update(file)
+        # Otherwrise, we create it
         else:
-            # We create
-            file_commit = self.put(file)
+            file = self.put(file)
+        if isinstance(file, ProxyError):
+            return file.response()
+
+        ###########################################
+        # Making pull request
+        ###########################################
 
         return jsonify(file.dict())
