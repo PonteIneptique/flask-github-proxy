@@ -22,7 +22,7 @@ def make_client(gitid, gitsec, route_fail=None):
             response.status_code = 401
         return response
 
-    @github_api.route("/repos/<owner>/<repo>/git/refs", method="POST")
+    @github_api.route("/repos/<owner>/<repo>/git/refs", methods=["POST"])
     def make_ref(owner, repo):
         if request.url.split("?")[0] in github_api.route_fail.keys():
             resp = jsonify({

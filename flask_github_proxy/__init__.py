@@ -33,7 +33,7 @@ class GithubProxy(object):
                  prefix, source_repo, target_repo,
                  secret,
                  github_secret, github_id,
-                 default_branch=None, origin_branch=master,
+                 default_branch=None, origin_branch="master",
                  app=None, default_author=None):
 
         self.__blueprint__ = None
