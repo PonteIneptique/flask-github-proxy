@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request
 import base64
+import json
 
 
 def make_client(gitid, gitsec, route_fail=None):
@@ -7,6 +8,7 @@ def make_client(gitid, gitsec, route_fail=None):
     github_api.secret_id = gitsec
     github_api.client_id = gitid
     github_api.route_fail = route_fail
+    github_api.sha_origin = "123456"
     if not route_fail:
         github_api.route_fail = {}
 
@@ -32,15 +34,46 @@ def make_client(gitid, gitsec, route_fail=None):
             )
             resp.status_code = 404
             return resp
-
-        data = request.data
+        sha = github_api.sha_origin
+        data = json.loads(request.data.decode("utf-8"))
+        branch = "/".join(data["ref"].split("/")[3:])
         return jsonify({
-          "ref": "refs/heads/featureA",
-          "url": "https://api.github.com/repos/octocat/Hello-World/git/refs/heads/featureA",
+          "ref": data["ref"],
+          "url": "https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}".format(
+            owner=owner, repo=repo, branch=branch
+          ),
           "object": {
             "type": "commit",
-            "sha": "aa218f56b14c9653891f9e74264a383fa43fefbd",
-            "url": "https://api.github.com/repos/octocat/Hello-World/git/commits/aa218f56b14c9653891f9e74264a383fa43fefbd"
+            "sha": sha,
+            "url": "https://api.github.com/repos/{owner}/{repo}/git/commits/{sha}".format(
+                owner=owner, repo=repo, sha=sha
+            )
+          }
+        })
+
+    @github_api.route("/repos/<owner>/<repo>/git/refs/heads/<branch>", methods=["GET"])
+    def get_ref(owner, repo, branch):
+        if request.url.split("?")[0] in github_api.route_fail.keys():
+            resp = jsonify({
+                    "message": "Not Found",
+                    "documentation_url": "https://developer.github.com/v3"
+                }
+            )
+            resp.status_code = 404
+            return resp
+
+        sha = github_api.sha_origin
+        return jsonify({
+          "ref": "refs/heads/{branch}".format(branch=branch),
+          "url": "https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}".format(
+            owner=owner, repo=repo, branch=branch
+          ),
+          "object": {
+            "type": "commit",
+            "sha": sha,
+            "url": "https://api.github.com/repos/{owner}/{repo}/git/commits/{sha}".format(
+                owner=owner, repo=repo, sha=sha
+            )
           }
         })
 
@@ -137,7 +170,7 @@ def make_client(gitid, gitsec, route_fail=None):
             )
             resp.status_code = 404
             return resp
-        sha = "123456"
+        sha = github_api.sha_origin
         model = {
             "type": "file",
             "encoding": "base64",

@@ -62,20 +62,24 @@ class GithubProxy(object):
             self.app = None
 
     def request(self, method, url, **kwargs):
+        """ Unified method to make request to the Github API
+
+        :param method: HTTP Method to use
+        :param url: URL to reach
+        :param kwargs: dictionary of arguments (params for URL parameters, data for post/put data)
+        :return: Response
+        """
         if "params" not in kwargs:
             kwargs["params"] = {}
         kwargs["params"]["client_id"] = self.github_id
         kwargs["params"]["client_secret"] = self.github_secret
-
+        if "data" in kwargs:
+            kwargs["data"] = json.dumps(kwargs["data"])
         return make_request(
             method,
             url,
             **kwargs
         )
-
-    @property
-    def secret(self):
-        return self.__secret__
 
     def default_branch(self, file):
         """ Decide the name of the default branch given the file and the configuration
@@ -114,6 +118,10 @@ class GithubProxy(object):
     def default_author(self):
         return self.__default_author__
 
+    @property
+    def secret(self):
+        return self.__secret__
+
     def init_app(self, app):
         """ Initialize the application and register the blueprint
 
@@ -122,6 +130,7 @@ class GithubProxy(object):
         :return: Blueprint of the current nemo app
         :rtype: flask.Blueprint
         """
+        self.app = app
         self.__blueprint__ = Blueprint(
             self.__name__,
             self.__name__,
@@ -152,12 +161,12 @@ class GithubProxy(object):
                 source_repo=self.source_repo,
                 path=file.path
             ),
-            data=json.dumps({
+            data={
                 "message": file.logs,
                 "author": file.author.dict(),
                 "content": file.base64(),
                 "branch": file.branch
-            })
+            }
         )
 
         if data.status_code == 200:
@@ -208,13 +217,13 @@ class GithubProxy(object):
                 source_repo=self.source_repo,
                 path=file.path
             ),
-            data=json.dumps({
+            data={
                 "message": file.logs,
                 "author": file.author.dict(),
                 "content": file.base64(),
                 "sha": file.blob,
                 "branch": file.branch
-            })
+            }
         )
         if data.status_code == 200:
             file.pushed = True
@@ -234,23 +243,51 @@ class GithubProxy(object):
         """
         data = self.request(
             "GET",
-            "/{api}/{source_repo}/git/refs/heads/{branch}".format(
+            "{api}/repos/{source_repo}/git/refs/heads/{branch}".format(
                 api=self.github_api_url,
                 source_repo=self.source_repo,
                 branch=branch
-            ),
+            )
         )
         if data.status_code == 200:
-            data = json.loads(data.data)
+            data = json.loads(data.data.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
                 return False
             #  Otherwise, we get one record
-            return data["sha"]
+            return data["object"]["sha"]
         elif data.status_code == 404:
             return False
         else:
-            data = json.loads(data.data)
+            data = json.loads(data.data.decode("utf-8"))
+            return ProxyError(data.status_code, data["message"])
+
+    def make_pull(self, file):
+        data = self.request(
+            "GET",
+            "{api}/repos/{source_repo}/pulls".format(
+                api=self.github_api_url,
+                source_repo=self.source_repo
+            ),
+            data={
+              "title": "[Proxy] {message}".format(message=file.logs),
+              "body": "",
+              "head": file.branch,
+              "base": self.origin_branch
+            }
+
+        )
+        if data.status_code == 200:
+            data = json.loads(data.data.decode("utf-8"))
+            if isinstance(data, list):
+                # No addresses matches, we get search results which stars with {branch}
+                return False
+            #  Otherwise, we get one record
+            return data["object"]["sha"]
+        elif data.status_code == 404:
+            return False
+        else:
+            data = json.loads(data.data.decode("utf-8"))
             return ProxyError(data.status_code, data["message"])
 
     def make_ref(self, branch):
@@ -268,25 +305,25 @@ class GithubProxy(object):
 
         data = self.request(
             "POST",
-            "/{api}/{source_repo}/git/refs".format(
+            "{api}/repos/{source_repo}/git/refs".format(
                 api=self.github_api_url,
                 source_repo=self.source_repo
             ),
-            data=json.dumps({
+            data={
               "ref": "refs/heads/{branch}".format(branch=branch),
               "sha": master_sha
-            })
+            }
         )
 
         if data.status_code == 200:
-            data = json.loads(data.data)
+            data = json.loads(data.data.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
                 return False
             #  Otherwise, we get one record
-            return data["sha"]
+            return data["object"]["sha"]
         else:
-            data = json.loads(data.data)
+            data = json.loads(data.data.decode("utf-8"))
             return ProxyError(data.status_code, data["message"])
 
     def r_receive(self, filename):

@@ -70,9 +70,17 @@ class TestIntegration(TestCase):
         )
 
     def test_route_github_put(self):
+        """ Test a full put routine
+
+        The test occurs with creation of a new branch
+        """
         self.github_api.route_fail[
             "http://localhost/repos/ponteineptique/dummy/contents/path/to/some/file.xml"
         ] = True
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+        ] = True
+
         data = self.makeRequest(
             (BytesIO(b'Some content'), 'file.xml'),
             {
@@ -83,14 +91,30 @@ class TestIntegration(TestCase):
                 "sha": make_secret("Some content", self.secret)
             }
         )
+
         self.assertIn(
-            'GET::/repos/ponteineptique/dummy/contents/path/to/some/file.xml',
-            self.calls.keys(),
+            'GET::/repos/ponteineptique/dummy/git/refs/heads/uuid-1234', self.calls.keys(),
+            "It should check if the branch exists"
+        )
+        self.assertIn(
+            'GET::/repos/ponteineptique/dummy/git/refs/heads/master', self.calls.keys(),
+            "Because it does not exist, it should check for master"
+        )
+        self.assertIn(
+            'POST::/repos/ponteineptique/dummy/git/refs', self.calls.keys(),
+            "And it should create a new branch"
+        )
+        self.assertEqual(
+            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]),
+            {'ref': 'refs/heads/uuid-1234', 'sha': '123456'},
+            "Data pushed should reference to the new branch"
+        )
+        self.assertIn(
+            'GET::/repos/ponteineptique/dummy/contents/path/to/some/file.xml', self.calls.keys(),
             "It should check if files exists"
         )
         self.assertIn(
-            'PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml',
-            self.calls.keys(),
+            'PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml', self.calls.keys(),
             "It should make a put as the file does not exist"
         )
         put_data = json.loads(
@@ -111,6 +135,7 @@ class TestIntegration(TestCase):
         )
 
     def test_route_github_update(self):
+        self.github_api.sha_origin = "789456"
         data = self.makeRequest(
             (BytesIO(b'Some content'), 'file.xml'),
             {
@@ -122,13 +147,19 @@ class TestIntegration(TestCase):
             }
         )
         self.assertIn(
-            'GET::/repos/ponteineptique/dummy/contents/path/to/some/file.xml',
-            self.calls.keys(),
-            "It should check if files exists"
+            'GET::/repos/ponteineptique/dummy/git/refs/heads/uuid-1234', self.calls.keys(),
+            "It should check if the branch exists"
+        )
+        self.assertNotIn(
+            'GET::/repos/ponteineptique/dummy/git/refs/heads/master', self.calls.keys(),
+            "Because it exists, it should check for master"
+        )
+        self.assertNotIn(
+            'POST::/repos/ponteineptique/dummy/git/refs', self.calls.keys(),
+            "Nor should it create a new branch"
         )
         self.assertIn(
-            'POST::/repos/ponteineptique/dummy/contents/path/to/some/file.xml',
-            self.calls.keys(),
+            'POST::/repos/ponteineptique/dummy/contents/path/to/some/file.xml', self.calls.keys(),
             "It should make a post as the file does exist"
         )
         put_data = json.loads(
@@ -143,9 +174,9 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                "sha": "123456",
+                "sha": "789456",
                 "branch": "uuid-1234"
-                # There should be a branch convention
             },
-            put_data
+            put_data,
+            "It should post the right data as well as the right sha for the branch"
         )
