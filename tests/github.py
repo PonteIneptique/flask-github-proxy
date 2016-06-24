@@ -9,6 +9,7 @@ def make_client(gitid, gitsec, route_fail=None):
     github_api.client_id = gitid
     github_api.route_fail = route_fail
     github_api.sha_origin = "123456"
+    github_api.new_sha = "abcdef"
     if not route_fail:
         github_api.route_fail = {}
 
@@ -37,7 +38,7 @@ def make_client(gitid, gitsec, route_fail=None):
         sha = github_api.sha_origin
         data = json.loads(request.data.decode("utf-8"))
         branch = "/".join(data["ref"].split("/")[3:])
-        return jsonify({
+        resp = jsonify({
           "ref": data["ref"],
           "url": "https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}".format(
             owner=owner, repo=repo, branch=branch
@@ -50,6 +51,8 @@ def make_client(gitid, gitsec, route_fail=None):
             )
           }
         })
+        resp.status_code = 201
+        return resp
 
     @github_api.route("/repos/<owner>/<repo>/git/refs/heads/<branch>", methods=["GET"])
     def get_ref(owner, repo, branch):
@@ -79,13 +82,86 @@ def make_client(gitid, gitsec, route_fail=None):
 
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["POST"])
     def put_file(owner, repo, file):
-        resp = jsonify({
-                "message": "Not Found",
-                "documentation_url": "https://developer.github.com/v3"
+        if request.url.split("?")[0] in github_api.route_fail.keys():
+            resp = jsonify({
+                    "message": "Not Found",
+                    "documentation_url": "https://developer.github.com/v3"
+                }
+            )
+            resp.status_code = 404
+        else:
+            data = json.loads(request.data.decode("utf-8"))
+            print(data)
+            resp = {
+                "commit": {
+                    "author": {
+                        "date": "2014-11-07T22:01:45Z",
+                        "name": data["author"]["name"],
+                         "email": data["author"]["email"]
+                    },
+                    "committer": {
+                        "date": "2014-11-07T22:01:45Z",
+                        "email": "schacon@gmail.com",
+                        "name": "Scott Chacon"
+                    },
+                    "html_url": "https://github.com/{owner}/{repo}/git/commit/7638417db6d59f3c431d3e1f261cc637155684cd".format(
+                        owner=owner, repo=repo
+                    ),
+                    "message": data["message"],
+                    "parents": [
+                        {
+                            "html_url": "https://github.com/{owner}/{repo}/git/commit/{oldsha}".format(
+                                owner=owner, repo=repo, oldsha=data["sha"]
+                            ),
+                            "sha": "1acc419d4d6a9ce985db7be48c6349a0475975b5",
+                            "url": "https://api.github.com/repos/{owner}/{repo}/git/commits/{oldsha}".format(
+                                owner=owner, repo=repo, oldsha=data["sha"]
+                            )
+                        }
+                    ],
+                    "sha": "7638417db6d59f3c431d3e1f261cc637155684cd",
+                    "tree": {
+                        "sha": "691272480426f78a0138979dd3ce63b77f706feb",
+                        "url": "https://api.github.com/repos/{owner}/{repo}/git/trees/691272480426f78a0138979dd3ce63b77f706feb".format(
+                            owner=owner, repo=repo
+                        )
+                    },
+                    "url": "https://api.github.com/repos/{owner}/{repo}/git/commits/7638417db6d59f3c431d3e1f261cc637155684cd".format(
+                        owner=owner, repo=repo
+                    )
+                },
+                "content": {
+                    "_links": {
+                        "git": "https://api.github.com/repos/{owner}/{repo}/git/blobs/{sha}".format(
+                            owner=owner, repo=repo, sha=github_api.new_sha
+                        ),
+                        "html": "https://github.com/{owner}/{repo}/blob/{branch}/{path}".format(
+                            owner=owner, repo=repo, path=file, branch=data["branch"]
+                        ),
+                        "self": "https://api.github.com/repos/{owner}/{repo}/contents/{path}".format(
+                            owner=owner, repo=repo, path=file
+                        )
+                    },
+                    "download_url": "https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}".format(
+                        owner=owner, repo=repo, path=file, branch=data["branch"]
+                    ),
+                    "git_url": "https://api.github.com/repos/{owner}/{repo}/git/blobs/{sha}".format(
+                        owner=owner, repo=repo, sha=github_api.new_sha
+                    ),
+                    "html_url": "https://github.com/{owner}/{repo}/blob/{branch}/{path}".format(
+                        owner=owner, repo=repo, path=file, branch=data["branch"]
+                    ),
+                    "name": file.split("/")[-1],
+                    "path": file,
+                    "sha": github_api.new_sha,
+                    "size": 9,
+                    "type": "file",
+                    "url": "https://api.github.com/repos/{owner}/{repo}/contents/{path}".format(
+                        owner=owner, repo=repo, path=file
+                    )
+                }
             }
-        )
-        resp.status_code = 404
-        return resp
+            return jsonify(data)
 
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["PUT"])
     def update_file(owner, repo, file):
@@ -138,7 +214,7 @@ def make_client(gitid, gitsec, route_fail=None):
                   "name": data["author"]["name"],
                   "email": data["author"]["mail"]
                 },
-                "message": "my commit message",
+                "message": data["message"],
                 "tree": {
                   "url": "https://api.github.com/repos/{owner}/{repo}/git/trees/691272480426f78a0138979dd3ce63b77f706feb".format(
                     owner=owner, repo=repo
@@ -158,6 +234,7 @@ def make_client(gitid, gitsec, route_fail=None):
                 ]
               }
             })
+        resp.status_code = 201
         return resp
 
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["GET"])

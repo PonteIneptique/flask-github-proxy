@@ -10,8 +10,8 @@ class GithubProxy(object):
     """ Provides routes to push files to github and open pull request as a service
 
     :param path: URI Prefix (Has to start with "/")
-    :param source_repo:
-    :param target_repo:
+    :param origin:
+    :param upstream:
     :param app:
 
     """
@@ -30,7 +30,7 @@ class GithubProxy(object):
         AUTO_SHA = 0
 
     def __init__(self,
-                 prefix, source_repo, target_repo,
+                 prefix, origin, upstream,
                  secret,
                  github_secret, github_id,
                  default_branch=None, origin_branch="master",
@@ -39,18 +39,19 @@ class GithubProxy(object):
         self.__blueprint__ = None
         self.__prefix__ = prefix
         self.__name__ = prefix.replace("/", "_").replace(".", "_")
-        self.__source_repo__ = source_repo
-        self.__target_repo__ = target_repo
+        self.__origin__ = origin
+        self.__upstream__ = upstream
         self.__secret__ = secret
         self.__urls__ = deepcopy(type(self).URLS)
         self.__default_author__ = default_author
         self.__default_branch__ = default_branch
+        self.github_secret = github_secret
+        self.github_id = github_id
+
         self.origin_branch = origin_branch
         if default_branch is None:
             self.__default_branch__ = GithubProxy.DEFAULT_BRANCH.NO
 
-        self.github_secret = github_secret
-        self.github_id = github_id
         self.github_api_url = "https://api.github.com"
         if not default_author:
             self.__default_author__ = GithubProxy.DEFAULT_AUTHOR
@@ -107,12 +108,12 @@ class GithubProxy(object):
         return self.__name__
 
     @property
-    def source_repo(self):
-        return self.__source_repo__
+    def origin(self):
+        return self.__origin__
 
     @property
-    def target_repo(self):
-        return self.__target_repo__
+    def upstream(self):
+        return self.__upstream__
 
     @property
     def default_author(self):
@@ -156,9 +157,9 @@ class GithubProxy(object):
         """
         data = self.request(
             "PUT",
-            "{api}/repos/{source_repo}/contents/{path}".format(
+            "{api}/repos/{origin}/contents/{path}".format(
                 api=self.github_api_url,
-                source_repo=self.source_repo,
+                origin=self.origin,
                 path=file.path
             ),
             data={
@@ -169,7 +170,7 @@ class GithubProxy(object):
             }
         )
 
-        if data.status_code == 200:
+        if data.status_code == 201:
             file.pushed = True
             return file
         else:
@@ -184,9 +185,9 @@ class GithubProxy(object):
         """
         data = self.request(
             "GET",
-            "{api}/repos/{source_repo}/contents/{path}".format(
+            "{api}/repos/{origin}/contents/{path}".format(
                 api=self.github_api_url,
-                source_repo=self.source_repo,
+                origin=self.origin,
                 path=file.path
             ),
             params={
@@ -212,9 +213,9 @@ class GithubProxy(object):
         """
         data = self.request(
             "POST",
-            "{api}/repos/{source_repo}/contents/{path}".format(
+            "{api}/repos/{origin}/contents/{path}".format(
                 api=self.github_api_url,
-                source_repo=self.source_repo,
+                origin=self.origin,
                 path=file.path
             ),
             data={
@@ -233,7 +234,32 @@ class GithubProxy(object):
             return ProxyError(data.status_code, reply["message"])
 
     def pull_request(self, file):
-        pass
+        """ Create a pull request
+
+        :param file:
+        :return:
+        """
+        data = self.request(
+            "PUT",
+            "{api}/repos/{upstream}/pulls".format(
+                api=self.github_api_url,
+                upstream=self.upstream,
+                path=file.path
+            ),
+            data={
+                "message": file.logs,
+                "author": file.author.dict(),
+                "head": "{}:{}".format(self.origin.split("/")[0], file.branch),
+                "base": self.origin_branch
+            }
+        )
+
+        if data.status_code == 200:
+            file.pushed = True
+            return file
+        else:
+            reply = json.loads(data.data.decode("utf-8"))
+            return ProxyError(data.status_code, reply["message"])
 
     def get_ref(self, branch):
         """ Check if a reference exists
@@ -243,9 +269,9 @@ class GithubProxy(object):
         """
         data = self.request(
             "GET",
-            "{api}/repos/{source_repo}/git/refs/heads/{branch}".format(
+            "{api}/repos/{origin}/git/refs/heads/{branch}".format(
                 api=self.github_api_url,
-                source_repo=self.source_repo,
+                origin=self.origin,
                 branch=branch
             )
         )
@@ -263,11 +289,16 @@ class GithubProxy(object):
             return ProxyError(data.status_code, data["message"])
 
     def make_pull(self, file):
+        """ Make a pull request based on the file
+
+        :param file:
+        :return:
+        """
         data = self.request(
             "GET",
-            "{api}/repos/{source_repo}/pulls".format(
+            "{api}/repos/{origin}/pulls".format(
                 api=self.github_api_url,
-                source_repo=self.source_repo
+                origin=self.origin
             ),
             data={
               "title": "[Proxy] {message}".format(message=file.logs),
@@ -277,13 +308,13 @@ class GithubProxy(object):
             }
 
         )
-        if data.status_code == 200:
+        if data.status_code == 201:
             data = json.loads(data.data.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
                 return False
             #  Otherwise, we get one record
-            return data["object"]["sha"]
+            return data["html_url"]
         elif data.status_code == 404:
             return False
         else:
@@ -305,9 +336,9 @@ class GithubProxy(object):
 
         data = self.request(
             "POST",
-            "{api}/repos/{source_repo}/git/refs".format(
+            "{api}/repos/{origin}/git/refs".format(
                 api=self.github_api_url,
-                source_repo=self.source_repo
+                origin=self.origin
             ),
             data={
               "ref": "refs/heads/{branch}".format(branch=branch),
@@ -315,7 +346,7 @@ class GithubProxy(object):
             }
         )
 
-        if data.status_code == 200:
+        if data.status_code == 201:
             data = json.loads(data.data.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
@@ -323,8 +354,8 @@ class GithubProxy(object):
             #  Otherwise, we get one record
             return data["object"]["sha"]
         else:
-            data = json.loads(data.data.decode("utf-8"))
-            return ProxyError(data.status_code, data["message"])
+            answer = json.loads(data.data.decode("utf-8"))
+            return ProxyError(data.status_code, answer["message"])
 
     def r_receive(self, filename):
         """ Function which receives the data from Perseids
