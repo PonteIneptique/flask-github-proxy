@@ -240,23 +240,22 @@ class GithubProxy(object):
         :return:
         """
         data = self.request(
-            "PUT",
+            "POST",
             "{api}/repos/{upstream}/pulls".format(
                 api=self.github_api_url,
                 upstream=self.upstream,
                 path=file.path
             ),
             data={
-                "message": file.logs,
-                "author": file.author.dict(),
-                "head": "{}:{}".format(self.origin.split("/")[0], file.branch),
-                "base": self.origin_branch
+              "title": "[Proxy] {message}".format(message=file.logs),
+              "body": "",
+              "head": "{origin}:{branch}".format(origin=self.origin.split("/")[0], branch=file.branch),
+              "base": self.origin_branch
             }
         )
 
-        if data.status_code == 200:
-            file.pushed = True
-            return file
+        if data.status_code == 201:
+            return json.loads(data.data.decode("utf-8"))["html_url"]
         else:
             reply = json.loads(data.data.decode("utf-8"))
             return ProxyError(data.status_code, reply["message"])
@@ -282,39 +281,6 @@ class GithubProxy(object):
                 return False
             #  Otherwise, we get one record
             return data["object"]["sha"]
-        elif data.status_code == 404:
-            return False
-        else:
-            data = json.loads(data.data.decode("utf-8"))
-            return ProxyError(data.status_code, data["message"])
-
-    def make_pull(self, file):
-        """ Make a pull request based on the file
-
-        :param file:
-        :return:
-        """
-        data = self.request(
-            "GET",
-            "{api}/repos/{origin}/pulls".format(
-                api=self.github_api_url,
-                origin=self.origin
-            ),
-            data={
-              "title": "[Proxy] {message}".format(message=file.logs),
-              "body": "",
-              "head": file.branch,
-              "base": self.origin_branch
-            }
-
-        )
-        if data.status_code == 201:
-            data = json.loads(data.data.decode("utf-8"))
-            if isinstance(data, list):
-                # No addresses matches, we get search results which stars with {branch}
-                return False
-            #  Otherwise, we get one record
-            return data["html_url"]
         elif data.status_code == 404:
             return False
         else:
@@ -369,7 +335,7 @@ class GithubProxy(object):
             - Return PR link to Perseids
 
         :param filename: Path for the file
-        :return:
+        :return: JSON Response with status_code 201 if successful.
         """
         ###########################################
         # Retrieving data
@@ -447,4 +413,15 @@ class GithubProxy(object):
         # Making pull request
         ###########################################
 
-        return jsonify(file.dict())
+        pr_url = self.pull_request(file)
+        if isinstance(file, ProxyError):
+            return file.response()
+
+        reply = {
+            "status": "success",
+            "message": "The workflow was well applied",
+            "pr_url": pr_url
+        }
+        data = jsonify(reply)
+        data.status_code = 201
+        return data

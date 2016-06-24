@@ -81,7 +81,7 @@ class TestIntegration(TestCase):
             "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
         ] = True
 
-        data = self.makeRequest(
+        result = self.makeRequest(
             (BytesIO(b'Some content'), 'file.xml'),
             {
                 "author": "ponteineptique",
@@ -133,10 +133,26 @@ class TestIntegration(TestCase):
             },
             put_data
         )
+        self.assertIn(
+            'POST::/repos/perseusDL/dummy/pulls', self.calls.keys(),
+            "It should create a pull request"
+        )
+        pr = json.loads(self.calls["POST::/repos/perseusDL/dummy/pulls"]["data"])
+        self.assertEqual(
+            (pr["head"], pr["base"]), ("ponteineptique:uuid-1234", "master"),
+            "Origin and upstream should be well set up"
+        )
+        self.assertEqual(
+            result.status_code, 201, "Test should create the PR"
+        )
+        self.assertEqual(
+            json.loads(result.data.decode("utf-8"))["pr_url"], "https://github.com/perseusDL/dummy/pull/9",
+            "Test should create the PR and returns its url"
+        )
 
     def test_route_github_update(self):
         self.github_api.sha_origin = "789456"
-        data = self.makeRequest(
+        result = self.makeRequest(
             (BytesIO(b'Some content'), 'file.xml'),
             {
                 "author": "ponteineptique",
@@ -179,4 +195,20 @@ class TestIntegration(TestCase):
             },
             put_data,
             "It should post the right data as well as the right sha for the branch"
+        )
+        self.assertIn(
+            'POST::/repos/perseusDL/dummy/pulls', self.calls.keys(),
+            "It should create a pull request"
+        )
+        pr = json.loads(self.calls["POST::/repos/perseusDL/dummy/pulls"]["data"])
+        self.assertEqual(
+            (pr["head"], pr["base"]), ("ponteineptique:uuid-1234", "master"),
+            "Origin and upstream should be well set up"
+        )
+        self.assertEqual(
+            result.status_code, 201, "Test should create the PR"
+        )
+        self.assertEqual(
+            json.loads(result.data.decode("utf-8"))["pr_url"], "https://github.com/perseusDL/dummy/pull/9",
+            "Test should create the PR and returns its url"
         )

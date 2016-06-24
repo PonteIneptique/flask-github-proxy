@@ -10,6 +10,7 @@ def make_client(gitid, gitsec, route_fail=None):
     github_api.route_fail = route_fail
     github_api.sha_origin = "123456"
     github_api.new_sha = "abcdef"
+    github_api.pr_number = 9
     if not route_fail:
         github_api.route_fail = {}
 
@@ -91,7 +92,6 @@ def make_client(gitid, gitsec, route_fail=None):
             resp.status_code = 404
         else:
             data = json.loads(request.data.decode("utf-8"))
-            print(data)
             resp = {
                 "commit": {
                     "author": {
@@ -281,5 +281,31 @@ def make_client(gitid, gitsec, route_fail=None):
             }
         }
         return check_secret(jsonify(model))
+
+    @github_api.route("/repos/<owner>/<repo>/pulls", methods=["POST"])
+    def make_pr(owner, repo):
+        pr_number = github_api.pr_number
+        if request.url.split("?")[0] in github_api.route_fail.keys():
+            resp = jsonify({
+                    "message": "Not Found",
+                    "documentation_url": "https://developer.github.com/v3"
+                }
+            )
+            resp.status_code = 404
+            return resp
+        data = json.loads(request.data.decode("utf-8"))
+        reply = jsonify({
+          "id": 1,
+          "url": "https://api.github.com/repos/{owner}/{repo}/pulls/{nb}".format(
+              owner=owner, repo=repo, nb=pr_number
+          ),
+          "html_url": "https://github.com/{owner}/{repo}/pull/{nb}".format(
+              owner=owner, repo=repo, nb=pr_number
+          ),
+          "title": data["title"],
+          "body": data["body"],
+        })
+        reply.status_code = 201
+        return reply
 
     return github_api
