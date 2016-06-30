@@ -1,22 +1,22 @@
 from flask import Flask, jsonify, request
 import base64
 import json
+from collections import defaultdict
 
 
-def make_client(gitid, gitsec, route_fail=None):
+def make_client(token, route_fail=None):
     github_api = Flask("app")
-    github_api.secret_id = gitsec
-    github_api.client_id = gitid
+    github_api.token = token
     github_api.route_fail = route_fail
     github_api.sha_origin = "123456"
     github_api.new_sha = "abcdef"
     github_api.pr_number = 9
+    github_api.exist_file = defaultdict(lambda: False)
     if not route_fail:
         github_api.route_fail = {}
 
     def check_secret(response):
-        if request.args.get("client_id") != github_api.client_id \
-                or request.args.get("client_secret") != github_api.secret_id:
+        if request.headers["Authorization"] != "token %s" % github_api.token:
             response = jsonify(
                 {
                     "message": "Bad credentials",
@@ -90,7 +90,17 @@ def make_client(gitid, gitsec, route_fail=None):
                 }
             )
             resp.status_code = 404
-        else:
+
+    @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["PUT"])
+    def update_file(owner, repo, file):
+        if request.url.split("?")[0] in github_api.route_fail.keys():
+            resp = jsonify({
+                    "message": "Not Found",
+                    "documentation_url": "https://developer.github.com/v3"
+                }
+            )
+            resp.status_code = 404
+        elif github_api.exist_file[file] is False:
             data = json.loads(request.data.decode("utf-8"))
             resp = {
                 "commit": {
@@ -161,17 +171,7 @@ def make_client(gitid, gitsec, route_fail=None):
                     )
                 }
             }
-            return jsonify(data)
-
-    @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["PUT"])
-    def update_file(owner, repo, file):
-        if request.url.split("?")[0] in github_api.route_fail.keys():
-            resp = jsonify({
-                    "message": "Not Found",
-                    "documentation_url": "https://developer.github.com/v3"
-                }
-            )
-            resp.status_code = 404
+            resp = jsonify(data)
         else:
             data = request.data
             resp = jsonify({
@@ -234,7 +234,7 @@ def make_client(gitid, gitsec, route_fail=None):
                 ]
               }
             })
-        resp.status_code = 201
+            resp.status_code = 201
         return resp
 
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["GET"])

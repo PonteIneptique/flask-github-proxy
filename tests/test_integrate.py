@@ -13,7 +13,7 @@ import json
 
 
 def make_secret(data, secret):
-    return sha256(bytes("{}{}".format(data.decode("utf-8"), secret), 'utf8')).hexdigest()
+    return sha256(bytes("{}{}".format(data, secret), 'utf8')).hexdigest()
 
 
 class TestIntegration(TestCase):
@@ -25,8 +25,7 @@ class TestIntegration(TestCase):
             "/perseids",
             "ponteineptique/dummy",
             "perseusDL/dummy",
-            github_id="client-id",
-            github_secret="client-secret",
+            token="client-id",
             secret=self.secret,
             app=self.app
         )
@@ -35,7 +34,6 @@ class TestIntegration(TestCase):
         self.client = self.app.test_client()
         self.github_api = make_client(
             "client-id",
-            "client-secret",
             {}
         )
         self.github_api_client = self.github_api.test_client()
@@ -48,7 +46,9 @@ class TestIntegration(TestCase):
                     "&".join(["{}={}".format(key, value) for key, value in kwargs["params"].items()])
                 )
                 del kwargs["params"]
-            return getattr(self.github_api_client, method.lower())(url, **kwargs)
+            data = getattr(self.github_api_client, method.lower())(url, **kwargs)
+            data.content = data.data
+            return data
 
         self.patcher = mock.patch(
             "flask_github_proxy.make_request",
@@ -75,16 +75,19 @@ class TestIntegration(TestCase):
 
         The test occurs with creation of a new branch
         """
+        """
         self.github_api.route_fail[
             "http://localhost/repos/ponteineptique/dummy/contents/path/to/some/file.xml"
         ] = True
+        """
         self.github_api.route_fail[
             "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
         ] = True
+        self.github_api.exist_file["path/to/some/file.xml"] = True
 
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
-            make_secret(base64.encodebytes(b'Some content'), self.secret),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
             {
                 "author_name": "ponteineptique",
                 "date": "19/06/2016",
@@ -154,9 +157,10 @@ class TestIntegration(TestCase):
 
     def test_route_github_update(self):
         self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
-            make_secret(base64.encodebytes(b'Some content'), self.secret),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
             {
                 "author_name": "ponteineptique",
                 "date": "19/06/2016",
@@ -177,11 +181,11 @@ class TestIntegration(TestCase):
             "Nor should it create a new branch"
         )
         self.assertIn(
-            'POST::/repos/ponteineptique/dummy/contents/path/to/some/file.xml', self.calls.keys(),
+            'PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml', self.calls.keys(),
             "It should make a post as the file does exist"
         )
         put_data = json.loads(
-            self.calls["POST::/repos/ponteineptique/dummy/contents/path/to/some/file.xml"]["data"]
+            self.calls["PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml"]["data"]
         )
         put_data["content"] = base64.decodebytes(put_data["content"].encode('utf-8'))
         self.assertEqual(

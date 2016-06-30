@@ -10,6 +10,8 @@ from hashlib import sha256
 class GithubProxy(object):
     """ Provides routes to push files to github and open pull request as a service
 
+    Generate token : https://github.com/settings/tokens
+
     :param path: URI Prefix (Has to start with "/")
     :param origin:
     :param upstream:
@@ -33,8 +35,7 @@ class GithubProxy(object):
 
     def __init__(self,
                  prefix, origin, upstream,
-                 secret,
-                 github_secret, github_id,
+                 secret, token,
                  default_branch=None, origin_branch="master",
                  app=None, default_author=None):
 
@@ -47,8 +48,7 @@ class GithubProxy(object):
         self.__urls__ = deepcopy(type(self).URLS)
         self.__default_author__ = default_author
         self.__default_branch__ = default_branch
-        self.github_secret = github_secret
-        self.github_id = github_id
+        self.__token__ = token
 
         self.origin_branch = origin_branch
         if default_branch is None:
@@ -72,12 +72,14 @@ class GithubProxy(object):
         :param kwargs: dictionary of arguments (params for URL parameters, data for post/put data)
         :return: Response
         """
-        if "params" not in kwargs:
-            kwargs["params"] = {}
-        kwargs["params"]["client_id"] = self.github_id
-        kwargs["params"]["client_secret"] = self.github_secret
+
         if "data" in kwargs:
             kwargs["data"] = json.dumps(kwargs["data"])
+
+        kwargs["headers"] = {
+            'Content-Type': 'application/json',
+            'Authorization': 'token %s' % self.__token__,
+        }
         return make_request(
             method,
             url,
@@ -176,7 +178,7 @@ class GithubProxy(object):
             file.pushed = True
             return file
         else:
-            reply = json.loads(data.data.decode("utf-8"))
+            reply = json.loads(data.content.decode("utf-8"))
             return ProxyError(data.status_code, reply["message"])
 
     def get(self, file):
@@ -198,12 +200,12 @@ class GithubProxy(object):
         )
         # We update the file blob because it exists and we need it for update
         if data.status_code == 200:
-            data = json.loads(data.data.decode("utf-8"))
+            data = json.loads(data.content.decode("utf-8"))
             file.blob = data["sha"]
         elif data.status_code == 404:
             pass
         else:
-            data = json.loads(data.data.decode("utf-8"))
+            data = json.loads(data.content.decode("utf-8"))
             return ProxyError(data.status_code, data["message"])
         return file
 
@@ -214,7 +216,7 @@ class GithubProxy(object):
         :return: File with new information, including success
         """
         data = self.request(
-            "POST",
+            "PUT",
             "{api}/repos/{origin}/contents/{path}".format(
                 api=self.github_api_url,
                 origin=self.origin,
@@ -232,7 +234,7 @@ class GithubProxy(object):
             file.pushed = True
             return file
         else:
-            reply = json.loads(data.data.decode("utf-8"))
+            reply = json.loads(data.content.decode("utf-8"))
             return ProxyError(data.status_code, reply["message"])
 
     def pull_request(self, file):
@@ -257,9 +259,9 @@ class GithubProxy(object):
         )
 
         if data.status_code == 201:
-            return json.loads(data.data.decode("utf-8"))["html_url"]
+            return json.loads(data.content.decode("utf-8"))["html_url"]
         else:
-            reply = json.loads(data.data.decode("utf-8"))
+            reply = json.loads(data.content.decode("utf-8"))
             return ProxyError(data.status_code, reply["message"])
 
     def get_ref(self, branch):
@@ -277,7 +279,7 @@ class GithubProxy(object):
             )
         )
         if data.status_code == 200:
-            data = json.loads(data.data.decode("utf-8"))
+            data = json.loads(data.content.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
                 return False
@@ -286,7 +288,7 @@ class GithubProxy(object):
         elif data.status_code == 404:
             return False
         else:
-            data = json.loads(data.data.decode("utf-8"))
+            data = json.loads(data.content.decode("utf-8"))
             return ProxyError(data.status_code, data["message"])
 
     def make_ref(self, branch):
@@ -315,14 +317,14 @@ class GithubProxy(object):
         )
 
         if data.status_code == 201:
-            data = json.loads(data.data.decode("utf-8"))
+            data = json.loads(data.content.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
                 return False
             #  Otherwise, we get one record
             return data["object"]["sha"]
         else:
-            answer = json.loads(data.data.decode("utf-8"))
+            answer = json.loads(data.content.decode("utf-8"))
             return ProxyError(data.status_code, answer["message"])
 
     def check_sha(self, sha, content):
@@ -332,7 +334,7 @@ class GithubProxy(object):
         :param content: Base 64 encoded Content
         :return: Boolean indicating equality
         """
-        rightful_sha = sha256(bytes("{}{}".format(content.decode("utf-8"), self.secret), "utf-8")).hexdigest()
+        rightful_sha = sha256(bytes("{}{}".format(content, self.secret), "utf-8")).hexdigest()
         return sha == rightful_sha
 
     def r_receive(self, filename):
@@ -352,7 +354,7 @@ class GithubProxy(object):
         ###########################################
         # Retrieving data
         ###########################################
-        content = request.data
+        content = request.data.decode("utf-8")
 
         # Content checking
         if not content:
@@ -364,7 +366,7 @@ class GithubProxy(object):
         author = Author(author_name, author_email)
 
         date = request.args.get("date", datetime.datetime.now().date().isoformat())
-        logs = request.args.get("logs", "{} updated {}".format(author, filename))
+        logs = request.args.get("logs", "{} updated {}".format(author.name, filename))
 
         ###########################################
         # Checking data security
@@ -426,8 +428,8 @@ class GithubProxy(object):
         ###########################################
 
         pr_url = self.pull_request(file)
-        if isinstance(file, ProxyError):
-            return file.response()
+        if isinstance(pr_url, ProxyError):
+            return pr_url.response()
 
         reply = {
             "status": "success",

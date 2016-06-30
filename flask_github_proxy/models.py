@@ -63,7 +63,7 @@ class File(object):
 
     @property
     def content(self):
-        return base64.decodebytes(self.__content__)
+        return base64.decodebytes(self.__content__.encode("utf-8"))
 
     @property
     def author(self):
@@ -93,4 +93,4 @@ class File(object):
 
     @property
     def base64(self):
-        return self.__content__.decode("utf-8")
+        return self.__content__

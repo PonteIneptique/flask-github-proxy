@@ -8,8 +8,7 @@ def makeClient(app, **kwargs):
         prefix="/perseids",
         origin="ponteineptique/dummy",
         upstream="perseusDL/dummy",
-        github_id="client-id",
-        github_secret="client-secret",
+        token="client-secret",
         secret="14m3s3cr3t",
         app=app
     )
