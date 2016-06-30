@@ -13,7 +13,7 @@ import json
 
 
 def make_secret(data, secret):
-    return sha256(bytes("{}{}".format(data, secret), 'utf8')).hexdigest()
+    return sha256(bytes("{}{}".format(data.decode("utf-8"), secret), 'utf8')).hexdigest()
 
 
 class TestIntegration(TestCase):
@@ -61,12 +61,13 @@ class TestIntegration(TestCase):
         self.github_api.route_fail = {}
         self.patcher.stop()
 
-    def makeRequest(self, content, data):
+    def makeRequest(self, content, secure_sha, data):
         return self.client.post(
             "/perseids/push/path/to/some/file.xml?{}".format(
                 "&".join(["{}={}".format(k, v) for k, v in data.items()])
             ),
-            data={"content": content}
+            data=content,
+            headers={"fproxy-secure-hash": secure_sha}
         )
 
     def test_route_github_put(self):
@@ -82,13 +83,14 @@ class TestIntegration(TestCase):
         ] = True
 
         result = self.makeRequest(
-            (BytesIO(b'Some content'), 'file.xml'),
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content'), self.secret),
             {
-                "author": "ponteineptique",
+                "author_name": "ponteineptique",
                 "date": "19/06/2016",
                 "logs": "Hard work of transcribing file",
-                "branch": "uuid-1234",
-                "sha": make_secret("Some content", self.secret)
+                "auithor_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
             }
         )
 
@@ -153,13 +155,13 @@ class TestIntegration(TestCase):
     def test_route_github_update(self):
         self.github_api.sha_origin = "789456"
         result = self.makeRequest(
-            (BytesIO(b'Some content'), 'file.xml'),
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content'), self.secret),
             {
-                "author": "ponteineptique",
+                "author_name": "ponteineptique",
                 "date": "19/06/2016",
                 "logs": "Hard work of transcribing file",
-                "branch": "uuid-1234",
-                "sha": make_secret("Some content", self.secret)
+                "branch": "uuid-1234"
             }
         )
         self.assertIn(

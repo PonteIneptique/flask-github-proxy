@@ -1,9 +1,10 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, Response
 from copy import deepcopy
 import datetime
 import json
 from requests import request as make_request
 from flask_github_proxy.models import Author, File, ProxyError
+from hashlib import sha256
 
 
 class GithubProxy(object):
@@ -17,7 +18,8 @@ class GithubProxy(object):
     """
 
     URLS = [
-        ("/push/<path:filename>", "r_receive", ["POST"])
+        ("/push/<path:filename>", "r_receive", ["POST"]),
+        ("/", "r_doc", ["GET"])
     ]
 
     DEFAULT_AUTHOR = Author(
@@ -165,7 +167,7 @@ class GithubProxy(object):
             data={
                 "message": file.logs,
                 "author": file.author.dict(),
-                "content": file.base64(),
+                "content": file.base64,
                 "branch": file.branch
             }
         )
@@ -221,7 +223,7 @@ class GithubProxy(object):
             data={
                 "message": file.logs,
                 "author": file.author.dict(),
-                "content": file.base64(),
+                "content": file.base64,
                 "sha": file.blob,
                 "branch": file.branch
             }
@@ -323,6 +325,16 @@ class GithubProxy(object):
             answer = json.loads(data.data.decode("utf-8"))
             return ProxyError(data.status_code, answer["message"])
 
+    def check_sha(self, sha, content):
+        """ Check sent sha against the salted hash of the content
+
+        :param sha: SHA sent through fproxy-secure-hash header
+        :param content: Base 64 encoded Content
+        :return: Boolean indicating equality
+        """
+        rightful_sha = sha256(bytes("{}{}".format(content.decode("utf-8"), self.secret), "utf-8")).hexdigest()
+        return sha == rightful_sha
+
     def r_receive(self, filename):
         """ Function which receives the data from Perseids
 
@@ -340,22 +352,29 @@ class GithubProxy(object):
         ###########################################
         # Retrieving data
         ###########################################
-        content = request.files['content']
-        author = request.args.get("author", None)
-        if not author:
-            author = self.default_author
-        else:
-            author = author.split("/")
-            if len(author) < 2:
-                author.append(self.default_author.email)
-            author = Author(*author)
-        date = request.args.get("date", datetime.datetime.now().date().isoformat())
-        logs = request.args.get("logs", "{} updated {}".format(author, filename))
-        secure_sha = request.args.get("sha")
+        content = request.data
 
         # Content checking
         if not content:
             error = ProxyError(300, "Content is missing")
+            return error.response()
+
+        author_name = request.args.get("author_name", self.default_author.name)
+        author_email = request.args.get("author_email", self.default_author.email)
+        author = Author(author_name, author_email)
+
+        date = request.args.get("date", datetime.datetime.now().date().isoformat())
+        logs = request.args.get("logs", "{} updated {}".format(author, filename))
+
+        ###########################################
+        # Checking data security
+        ###########################################
+        secure_sha = None
+        if "fproxy-secure-hash" in request.headers:
+            secure_sha = request.headers["fproxy-secure-hash"]
+
+        if not secure_sha or not self.check_sha(secure_sha, content):
+            error = ProxyError(300, "Hash does not correspond with content")
             return error.response()
 
         ###########################################
@@ -369,13 +388,6 @@ class GithubProxy(object):
             logs=logs
         )
         file.branch = request.args.get("branch", self.default_branch(file))
-
-        ###########################################
-        # Checking data security
-        ###########################################
-        if not secure_sha or secure_sha != secure_sha:
-            error = ProxyError(300, "Hash does not correspond with content")
-            return error.response()
 
         ###########################################
         # Ensuring branch exists
@@ -425,3 +437,8 @@ class GithubProxy(object):
         data = jsonify(reply)
         data.status_code = 201
         return data
+
+    def r_doc(self):
+        r = Response("Documentation")
+        r.status_code = 200
+        return r

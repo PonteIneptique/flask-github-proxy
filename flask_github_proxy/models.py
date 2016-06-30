@@ -63,7 +63,7 @@ class File(object):
 
     @property
     def content(self):
-        return self.__content__
+        return base64.decodebytes(self.__content__)
 
     @property
     def author(self):
@@ -77,13 +77,9 @@ class File(object):
     def logs(self):
         return self.__logs__
 
-    def sha_secret(self, secret):
-        if secret:
-            return sha256(self.content.read() + secret).hexdigest()
-
     @property
     def sha(self):
-        return sha256(self.content.read()).hexdigest()
+        return sha256(self.base64).hexdigest()
 
     def dict(self):
         params = {
@@ -95,5 +91,6 @@ class File(object):
         params["author"] = params["author"].dict()
         return params
 
+    @property
     def base64(self):
-        return base64.encodebytes(self.content.read()).decode("utf-8")
+        return self.__content__.decode("utf-8")
