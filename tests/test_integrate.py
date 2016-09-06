@@ -134,7 +134,8 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                "branch": "uuid-1234"
+                "branch": "uuid-1234",
+                "sha": '123456'
             },
             put_data
         )

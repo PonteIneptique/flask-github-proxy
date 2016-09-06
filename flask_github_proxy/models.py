@@ -4,6 +4,18 @@ from flask import jsonify
 
 
 class Author(object):
+    """ The author models carries information about committer and data modifiers.
+
+    ..note:: It behaves as a "static" object : its variables are private one and only getters are registered.
+
+    :param name: Name of the user
+    :type name: str
+    :param email: Email of the user
+    :type email: str
+
+    :ivar name: Name of the user
+    :ivar email: Email of the user
+    """
     def __init__(self, name, email):
         self.__name__ = name
         self.__email__ = email
@@ -17,6 +29,10 @@ class Author(object):
         return self.__email__
 
     def dict(self):
+        """ Builds a dictionary representation of the object (eg: for JSON)
+
+        :return: Dictionary representation of the object
+        """
         return {
             "name": self.name,
             "email": self.email
@@ -24,28 +40,57 @@ class Author(object):
 
 
 class ProxyError(object):
+    """ Carries information for errors
+
+    :param code: HTTP Code Error
+    :type code: int
+    :param message: Message to display
+    :type message: str
+
+    :ivar code: HTTP Code Error
+    :ivar message: Message to display
+
+    """
     def __init__(self, code, message):
         self.code = code
         self.message = message
 
-    def response(self):
-        resp = jsonify({
+    def response(self, callback=jsonify):
+        """ View representation of the object
+
+        :param callback: Function to represent the error in view. Default : flask.jsonify
+        :type callback: function
+
+        :return: View
+        """
+        resp = callback({
             "status": "error",
             "message": self.message
-        })
-        resp.status_code = self.code
+        }, status_code=self.code)
         return resp
 
 
 class File(object):
-    """
+    """ File Representation
 
-    :param path:
-    :param content:
-    :param author:
-    :param date:
-    :param logs:
-    :return:
+    :param path: Path of the file on the repository
+    :type path: str
+    :param content: Base64 encoded content of the file
+    :type content: byte
+    :param author: Author of the file
+    :type author: Author
+    :param date: Date of the modification
+    :type date: str
+    :param logs: Message about the modification (Usually for commit message)
+    :type logs: str
+
+    :ivar path: Path of the file on the repository
+    :ivar content: Content of the file
+    :ivar base64: Base64 Encoded Content of the file
+    :ivar author: Author of the file
+    :ivar date: Date of the modification
+    :ivar sha: Sha hash of the content
+
     """
     def __init__(self, path, content, author, date, logs):
         self.__path__ = path
@@ -81,7 +126,15 @@ class File(object):
     def sha(self):
         return sha256(self.base64).hexdigest()
 
+    @property
+    def base64(self):
+        return self.__content__
+
     def dict(self):
+        """ Builds a dictionary representation of the object (eg: for JSON)
+
+        :return: Dictionary representation of the object
+        """
         params = {
             prop: getattr(self, prop)
             for prop in [
@@ -90,7 +143,3 @@ class File(object):
         }
         params["author"] = params["author"].dict()
         return params
-
-    @property
-    def base64(self):
-        return self.__content__
