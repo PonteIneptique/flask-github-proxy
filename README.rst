@@ -1,9 +1,9 @@
-.. image:: https://coveralls.io/repos/ponteineptique/flask-github-proxy/badge.svg?service=github
+.. image:: https://coveralls.io/repos/PonteIneptique/flask-github-proxy/badge.svg?service=github
   :alt: Coverage Status
-  :target: https://coveralls.io/github/ponteineptique/flask-github-proxy
-.. image:: https://travis-ci.org/ponteineptique/flask-github-proxy.svg
+  :target: https://coveralls.io/github/PonteIneptique/flask-github-proxy
+.. image:: https://travis-ci.org/PonteIneptique/flask-github-proxy.svg
   :alt: Build Status
-  :target: https://travis-ci.org/ponteineptique/flask-github-proxy
+  :target: https://travis-ci.org/PonteIneptique/flask-github-proxy
 .. image:: https://badge.fury.io/py/flask_github_proxy.svg
   :alt: PyPI version
   :target: http://badge.fury.io/py/flask_github_proxy
