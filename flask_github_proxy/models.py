@@ -6,7 +6,7 @@ from flask import jsonify
 class Author(object):
     """ The author models carries information about committer and data modifiers.
 
-    ..note:: It behaves as a "static" object : its variables are private one and only getters are registered.
+    .. note:: It behaves as a "static" object : its variables are private one and only getters are registered.
 
     :param name: Name of the user
     :type name: str
