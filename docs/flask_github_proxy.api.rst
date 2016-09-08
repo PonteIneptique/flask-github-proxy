@@ -5,7 +5,7 @@ Flask Github Proxy API Documentation
 Extension
 #########
 
-.. autofunction:: flask_github_proxy.GithubProxy
+.. autoclass:: flask_github_proxy.GithubProxy
     :members:
 
 Models
