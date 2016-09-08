@@ -12,16 +12,39 @@ class GithubProxy(object):
 
     Generate token : https://github.com/settings/tokens
 
-    :param path: URI Prefix (Has to start with "/")
-    :param origin:
-    :param upstream:
-    :param app:
+    You can use GithubProxy.DEFAULT_BRANCH.NO and GithubProxy.DEFAULT_BRANCH.AUTO_SHA to build \
+    branch name automatically.
 
+    Default user is GithubProxy.DEFAULT_AUTHOR
+
+    :param prefix: URI Prefix
+    :param origin: Origin Repository (Repository to Pull Request From)
+    :param upstream: Upstream Repository (Repository to Pull Request To)
+    :param secret: Secret Key. Used to check provenance of data
+    :param token: Github Authentification User Token
+    :param default_branch: Default Branch to push to
+    :type default_branch: str
+    :param origin_branch: Origin Branch to build on
+    :param app: Flask Application to connect to
+    :param default_author: Default Author for Commit and Modification
+
+    :cvar URLS: URLS routes of the proxy
+    :cvar DEFAULT_AUTHOR: Default Author
+    :type DEFAULT_AUTHOR: Author
+
+    :ivar blueprint: Flask Blueprint Instance for the Extension
+    :ivar prefix: Prefix of the Blueprint
+    :ivar name: Name of the Blueprint
+    :ivar origin: Git Repository to pull request from
+    :ivar upstream: Git Repository to pull request to
+    :ivar default_author: Default Author
+    :type default_author: Author
+    :ivar secret: Secret / Salt used to check provenance of data to be pushed
     """
 
     URLS = [
         ("/push/<path:filename>", "r_receive", ["POST"]),
-        ("/", "r_doc", ["GET"])
+        ("/", "r_main", ["GET"])
     ]
 
     DEFAULT_AUTHOR = Author(
@@ -30,6 +53,11 @@ class GithubProxy(object):
     )
 
     class DEFAULT_BRANCH:
+        """ Parameter Constant for the default_branch parameter
+
+        :cvar NO: Default Branch is equal to origin branch
+        :cvar AUTO_SHA: Generate a sha based on the file to create the branch
+        """
         NO = -1
         AUTO_SHA = 0
 
@@ -58,11 +86,10 @@ class GithubProxy(object):
         if not default_author:
             self.__default_author__ = GithubProxy.DEFAULT_AUTHOR
 
+        self.app = None
         if app is not None:
             self.app = app
             self.init_app(self.app)
-        else:
-            self.app = None
 
     def request(self, method, url, **kwargs):
         """ Unified method to make request to the Github API
@@ -90,12 +117,12 @@ class GithubProxy(object):
         """ Decide the name of the default branch given the file and the configuration
 
         :param file: File with informations about it
-        :return:
+        :return: Branch Name
         """
         if isinstance(self.__default_branch__, str):
             return self.__default_branch__
         elif self.__default_branch__ == GithubProxy.DEFAULT_BRANCH.NO:
-            return None
+            return self.origin_branch
         else:
             return file.sha
 
@@ -130,10 +157,10 @@ class GithubProxy(object):
     def init_app(self, app):
         """ Initialize the application and register the blueprint
 
-        :param app:
-
+        :param app: Flask Application
         :return: Blueprint of the current nemo app
         :rtype: flask.Blueprint
+
         """
         self.app = app
         self.__blueprint__ = Blueprint(
@@ -185,7 +212,7 @@ class GithubProxy(object):
         """ Check on github if a file exists
 
         :param file: File to check status of
-        :return: File with new information, including blob
+        :return: File with new information, including blob, or Error
         """
         data = self.request(
             "GET",
@@ -213,7 +240,7 @@ class GithubProxy(object):
         """ Make an update query on Github API for given file
 
         :param file: File to update, with its content
-        :return: File with new information, including success
+        :return: File with new information, including success (or Error)
         """
         data = self.request(
             "PUT",
@@ -240,8 +267,8 @@ class GithubProxy(object):
     def pull_request(self, file):
         """ Create a pull request
 
-        :param file:
-        :return:
+        :param file: File to push through pull request
+        :return: URL of the PullRequest or Proxy Error
         """
         data = self.request(
             "POST",
@@ -440,7 +467,11 @@ class GithubProxy(object):
         data.status_code = 201
         return data
 
-    def r_doc(self):
-        r = Response("Documentation")
+    def r_main(self):
+        """ Main Route of the API
+
+        :return: Response
+        """
+        r = jsonify({"message": "Nothing to see here"})
         r.status_code = 200
         return r
