@@ -6,6 +6,7 @@ Extension
 #########
 
 .. autofunction:: flask_github_proxy.GithubProxy
+    :members:
 
 Models
 ######
