@@ -55,7 +55,19 @@ class ProxyError(object):
         self.code = code
         self.message = message
 
-    def response(self, callback=jsonify):
+    @staticmethod
+    def AdvancedJsonify(data, status_code):
+        """ Advanced Jsonify Response Maker
+
+        :param data: Data
+        :param status_code: Status_code
+        :return: Response
+        """
+        response = jsonify(data)
+        response.status_code = status_code
+        return response
+
+    def response(self, callback=None):
         """ View representation of the object
 
         :param callback: Function to represent the error in view. Default : flask.jsonify
@@ -63,6 +75,8 @@ class ProxyError(object):
 
         :return: View
         """
+        if not callback:
+            callback = type(self).AdvancedJsonify
         resp = callback({
             "status": "error",
             "message": self.message

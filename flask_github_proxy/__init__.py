@@ -213,6 +213,7 @@ class GithubProxy(object):
 
         :param file: File to check status of
         :return: File with new information, including blob, or Error
+        :rtype: File or ProxyError
         """
         data = self.request(
             "GET",
@@ -444,12 +445,12 @@ class GithubProxy(object):
         # If it has a blob set up, it means we can update given file
         if file.blob:
             file = self.update(file)
-        # Otherwrise, we create it
+        # Otherwise, we create it
         else:
             file = self.put(file)
+
         if isinstance(file, ProxyError):
             return file.response()
-
         ###########################################
         # Making pull request
         ###########################################

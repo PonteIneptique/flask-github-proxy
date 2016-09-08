@@ -5,7 +5,6 @@ from flask_github_proxy import GithubProxy
 from unittest import TestCase
 from flask import Flask
 import mock
-from io import BytesIO
 from hashlib import sha256
 from .github import make_client
 import base64
@@ -70,19 +69,16 @@ class TestIntegration(TestCase):
             headers={"fproxy-secure-hash": secure_sha}
         )
 
-    def test_route_github_put(self):
-        """ Test a full put routine
+    def test_route_github_update(self):
+        """ Test a full file update routine
 
         The test occurs with creation of a new branch
         """
-        """
-        self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/contents/path/to/some/file.xml"
-        ] = True
-        """
+        # The Branch does not exist
         self.github_api.route_fail[
             "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
         ] = True
+        # The file exist
         self.github_api.exist_file["path/to/some/file.xml"] = True
 
         result = self.makeRequest(
@@ -156,7 +152,9 @@ class TestIntegration(TestCase):
             "Test should create the PR and returns its url"
         )
 
-    def test_route_github_update(self):
+    def test_route_github_create(self):
+        """ Test a file creation
+        """
         self.github_api.sha_origin = "789456"
         self.github_api.exist_file["path/to/some/file.xml"] = False
         result = self.makeRequest(
@@ -183,7 +181,7 @@ class TestIntegration(TestCase):
         )
         self.assertIn(
             'PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml', self.calls.keys(),
-            "It should make a post as the file does exist"
+            "It should make a put as the file does exist"
         )
         put_data = json.loads(
             self.calls["PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml"]["data"]
@@ -197,7 +195,6 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                "sha": "789456",
                 "branch": "uuid-1234"
             },
             put_data,

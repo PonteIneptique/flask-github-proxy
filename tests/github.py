@@ -100,7 +100,7 @@ def make_client(token, route_fail=None):
                 }
             )
             resp.status_code = 404
-        elif github_api.exist_file[file] is False:
+        elif github_api.exist_file[file] is True:
             data = json.loads(request.data.decode("utf-8"))
             resp = {
                 "commit": {
@@ -172,8 +172,9 @@ def make_client(token, route_fail=None):
                 }
             }
             resp = jsonify(data)
+            resp.status_code = 200
         else:
-            data = request.data
+            data = json.loads(request.data.decode("utf-8"))
             resp = jsonify({
               "content": {
                 "name": file.split("/")[-1],
@@ -186,7 +187,9 @@ def make_client(token, route_fail=None):
                 "html_url": "https://github.com/{owner}/{repo}/blob/{branch}/{path}".format(
                     owner=owner, repo=repo, branch=data["branch"], path=file
                 ),
-                "git_url": "https://api.github.com/repos/{owner}/{repo}/git/blobs/95b966ae1c166bd92f8ae7d1c313e738c731dfc3",
+                "git_url": "https://api.github.com/repos/{owner}/{repo}/git/blobs/95b966ae1c166bd92f8ae7d1c313e738c731dfc3".format(
+                    owner=owner, repo=repo
+                ),
                 "download_url": "https://raw.githubusercontent.com/{owner}/{repo}/{branch}/{path}".format(
                     owner=owner, repo=repo, branch=data["branch"], path=file
                 ),
@@ -195,7 +198,9 @@ def make_client(token, route_fail=None):
                   "self": "https://github.com/octokit/{owner}/{repo}/{branch}/{path}".format(
                      owner=owner, repo=repo, branch=data["branch"], path=file
                    ),
-                  "git": "https://api.github.com/repos/{owner}/{repo}/git/blobs/95b966ae1c166bd92f8ae7d1c313e738c731dfc3",
+                  "git": "https://api.github.com/repos/{owner}/{repo}/git/blobs/95b966ae1c166bd92f8ae7d1c313e738c731dfc3".format(
+                        owner=owner, repo=repo
+                    ),
                   "html": "https://github.com/{owner}/{repo}/blob/{branch}/{path}".format(
                         owner=owner, repo=repo, branch=data["branch"], path=file
                     )
@@ -212,7 +217,7 @@ def make_client(token, route_fail=None):
                 "author": {
                   "date": "2014-11-07T22:01:45Z",
                   "name": data["author"]["name"],
-                  "email": data["author"]["mail"]
+                  "email": data["author"]["email"]
                 },
                 "message": data["message"],
                 "tree": {
@@ -239,7 +244,7 @@ def make_client(token, route_fail=None):
 
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["GET"])
     def check_file(owner, repo, file):
-        if request.url.split("?")[0] in github_api.route_fail.keys():
+        if request.url.split("?")[0] in github_api.route_fail.keys() or github_api.exist_file[file] is False:
             resp = jsonify({
                     "message": "Not Found",
                     "documentation_url": "https://developer.github.com/v3"
