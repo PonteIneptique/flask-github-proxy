@@ -30,22 +30,13 @@ def make_client(token, route_fail=None):
     def make_ref(owner, repo):
         r = request.url.split("?")[0]
         if r in github_api.route_fail.keys():
-            if r is True:
-                resp = jsonify({
-                        "message": "Not Found",
-                        "documentation_url": "https://developer.github.com/v3"
-                    }
-                )
-                resp.status_code = 404
-                return resp
-            else:
-                resp = jsonify({
-                        "message": "Not Found",
-                        "documentation_url": "https://developer.github.com/v3"
-                    }
-                )
-                resp.status_code = 404
-                return resp
+            resp = jsonify({
+                    "message": "Not Found",
+                    "documentation_url": "https://developer.github.com/v3"
+                }
+            )
+            resp.status_code = 404
+            return resp
         sha = github_api.sha_origin
         data = json.loads(request.data.decode("utf-8"))
         branch = "/".join(data["ref"].split("/")[3:])
@@ -118,10 +109,9 @@ def make_client(token, route_fail=None):
     def update_file(owner, repo, file):
         if request.url.split("?")[0] in github_api.route_fail.keys():
             resp = jsonify({
-                    "message": "Not Found",
-                    "documentation_url": "https://developer.github.com/v3"
-                }
-            )
+                "message": "Not Found",
+                "documentation_url": "https://developer.github.com/v3"
+            })
             resp.status_code = 404
         elif github_api.exist_file[file] is True:
             data = json.loads(request.data.decode("utf-8"))
