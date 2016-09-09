@@ -28,14 +28,24 @@ def make_client(token, route_fail=None):
 
     @github_api.route("/repos/<owner>/<repo>/git/refs", methods=["POST"])
     def make_ref(owner, repo):
-        if request.url.split("?")[0] in github_api.route_fail.keys():
-            resp = jsonify({
-                    "message": "Not Found",
-                    "documentation_url": "https://developer.github.com/v3"
-                }
-            )
-            resp.status_code = 404
-            return resp
+        r = request.url.split("?")[0]
+        if r in github_api.route_fail.keys():
+            if r is True:
+                resp = jsonify({
+                        "message": "Not Found",
+                        "documentation_url": "https://developer.github.com/v3"
+                    }
+                )
+                resp.status_code = 404
+                return resp
+            else:
+                resp = jsonify({
+                        "message": "Not Found",
+                        "documentation_url": "https://developer.github.com/v3"
+                    }
+                )
+                resp.status_code = 404
+                return resp
         sha = github_api.sha_origin
         data = json.loads(request.data.decode("utf-8"))
         branch = "/".join(data["ref"].split("/")[3:])

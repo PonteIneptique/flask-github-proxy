@@ -346,10 +346,6 @@ class GithubProxy(object):
 
         if data.status_code == 201:
             data = json.loads(data.content.decode("utf-8"))
-            if isinstance(data, list):
-                # No addresses matches, we get search results which stars with {branch}
-                return ProxyError(404, "An error occurred during branch creation : got a list instead of one branch")
-            #  Otherwise, we get one record
             return data["object"]["sha"]
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))

@@ -327,3 +327,5 @@ class TestIntegration(TestCase):
             "Error message should be carried by ProxyError in Ref Creation Failure"
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
+
+    def
