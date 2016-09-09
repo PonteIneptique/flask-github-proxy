@@ -51,9 +51,11 @@ class ProxyError(object):
     :ivar message: Message to display
 
     """
-    def __init__(self, code, message):
+    def __init__(self, code, message, step=None, context=None):
         self.code = code
         self.message = message
+        self.step = step
+        self.context = context
 
         if isinstance(message, tuple):
             # This way to work prevents failure if there is a huge issue on Github side or there is a change in API
@@ -86,11 +88,13 @@ class ProxyError(object):
         """
         if not callback:
             callback = type(self).AdvancedJsonify
-        resp = callback({
+        resp = {
             "status": "error",
             "message": self.message
-        }, status_code=self.code)
-        return resp
+        }
+        if self.step:
+            resp["step"] = self.step
+        return callback(resp, status_code=self.code)
 
 
 class File(object):

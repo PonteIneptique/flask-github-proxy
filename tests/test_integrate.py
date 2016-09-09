@@ -334,7 +334,33 @@ class TestIntegration(TestCase):
         self.github_api.sha_origin = "789456"
         self.github_api.exist_file["path/to/some/file.xml"] = False
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+            "http://localhost/repos/ponteineptique/dummy/contents/path/to/some/file.xml"
+        ] = 501
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Error checking a file', 'status': 'error', "step": "get"},
+            "Error message should be carried by ProxyError in Check Reference Failure"
+        )
+        self.assertEqual(http, 501, "Status code should be carried by ProxyError")
+
+    def test_fail_create_file(self):
+        """ Test when creating the file fails
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/contents/path/to/some/file.xml"
         ] = 500
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
@@ -343,13 +369,13 @@ class TestIntegration(TestCase):
                 "author_name": "ponteineptique",
                 "date": "19/06/2016",
                 "logs": "Hard work of transcribing file",
-                "auithor_email": "leponteineptique@gmail.com",
+                "author_email": "leponteineptique@gmail.com",
                 "branch": "uuid-1234"
             }
         )
         data, http = response_read(result)
         self.assertEqual(
-            data, {'message': 'Bad credentials', 'status': 'error'},
-            "Error message should be carried by ProxyError in Ref Failure"
+            data, {'message': 'Not Found', 'status': 'error', 'step': 'put'},
+            "Error message should be carried by ProxyError in Put Failure"
         )
-        self.assertEqual(http, 401, "Status code should be carried by ProxyError")
+        self.assertEqual(http, 404, "Status code should be carried by ProxyError")

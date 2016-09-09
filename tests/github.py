@@ -257,7 +257,17 @@ def make_client(token, route_fail=None):
 
     @github_api.route("/repos/<owner>/<repo>/contents/<path:file>", methods=["GET"])
     def check_file(owner, repo, file):
-        if request.url.split("?")[0] in github_api.route_fail.keys() or github_api.exist_file[file] is False:
+        r = request.url.split("?")[0]
+        if r in github_api.route_fail.keys() or github_api.exist_file[file] is False:
+            if r in github_api.route_fail.keys() and github_api.route_fail[r] == 501:
+                resp = jsonify({
+                        "message": "Error checking a file",
+                        "documentation_url": "https://developer.github.com/v3"
+                    }
+                )
+                resp.status_code = 501
+                return resp
+
             resp = jsonify({
                     "message": "Not Found",
                     "documentation_url": "https://developer.github.com/v3"

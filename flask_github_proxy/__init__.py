@@ -186,6 +186,12 @@ class GithubProxy(object):
         :param file: File to create
         :return: File or ProxyError
         """
+        input_ = {
+            "message": file.logs,
+            "author": file.author.dict(),
+            "content": file.base64,
+            "branch": file.branch
+        }
         data = self.request(
             "PUT",
             "{api}/repos/{origin}/contents/{path}".format(
@@ -193,12 +199,7 @@ class GithubProxy(object):
                 origin=self.origin,
                 path=file.path
             ),
-            data={
-                "message": file.logs,
-                "author": file.author.dict(),
-                "content": file.base64,
-                "branch": file.branch
-            }
+            data=input_
         )
 
         if data.status_code == 201:
@@ -206,7 +207,10 @@ class GithubProxy(object):
             return file
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, (decoded_data, "message"))
+            return ProxyError(
+                data.status_code, (decoded_data, "message"),
+                step="put", context=input_
+            )
 
     def get(self, file):
         """ Check on github if a file exists
@@ -215,17 +219,15 @@ class GithubProxy(object):
         :return: File with new information, including blob, or Error
         :rtype: File or ProxyError
         """
-        data = self.request(
-            "GET",
-            "{api}/repos/{origin}/contents/{path}".format(
-                api=self.github_api_url,
-                origin=self.origin,
-                path=file.path
-            ),
-            params={
-                "ref": file.branch
-            }
+        uri = "{api}/repos/{origin}/contents/{path}".format(
+            api=self.github_api_url,
+            origin=self.origin,
+            path=file.path
         )
+        params = {
+            "ref": file.branch
+        }
+        data = self.request("GET", uri, params=params)
         # We update the file blob because it exists and we need it for update
         if data.status_code == 200:
             data = json.loads(data.content.decode("utf-8"))
@@ -234,7 +236,13 @@ class GithubProxy(object):
             pass
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, (decoded_data, "message"))
+            return ProxyError(
+                data.status_code, (decoded_data, "message"),
+                step="get", context={
+                    "uri": uri,
+                    "params": params
+                }
+            )
         return file
 
     def update(self, file):
