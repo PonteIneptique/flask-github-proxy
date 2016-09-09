@@ -16,7 +16,7 @@ def makeClient(app, **kwargs):
     proxy = GithubProxy(
         **args
     )
-    return app.test_client()
+    return app.test_client(), proxy
 
 
 class TestIntegration(TestCase):
@@ -27,14 +27,25 @@ class TestIntegration(TestCase):
         del self.app
 
     def test_prefix(self):
-        client = makeClient(self.app)
+        client, _ = makeClient(self.app)
         self.assertEqual(
             client.get("/perseids/").status_code, 200,
             "Prefix perseids works"
         )
-        client = makeClient(self.app, prefix="/syriaca")
+        client, _ = makeClient(self.app, prefix="/syriaca")
         self.assertEqual(
             client.get("/syriaca/").status_code, 200,
             "Prefix syriaca works"
+        )
+
+    def test_properties(self):
+        _, proxy = makeClient(self.app)
+        self.assertEqual(
+            proxy.prefix, "/perseids",
+            "The prefix should be accessible"
+        )
+        self.assertEqual(
+            proxy.name, "_perseids",
+            "The name should be accessible"
         )
 

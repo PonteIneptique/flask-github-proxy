@@ -57,14 +57,27 @@ def make_client(token, route_fail=None):
 
     @github_api.route("/repos/<owner>/<repo>/git/refs/heads/<branch>", methods=["GET"])
     def get_ref(owner, repo, branch):
-        if request.url.split("?")[0] in github_api.route_fail.keys():
-            resp = jsonify({
-                    "message": "Not Found",
+        r = request.url.split("?")[0]
+        if r in github_api.route_fail.keys():
+
+            if github_api.route_fail[r] is True:
+                # Used when we want to make a branch creation
+                resp = jsonify({
+                        "message": "Not Found",
+                        "documentation_url": "https://developer.github.com/v3"
+                    }
+                )
+                resp.status_code = 404
+                return resp
+            else:
+                # Used to detect failing on  GitHub API side
+
+                resp = jsonify({
+                    "message": "Bad credentials",
                     "documentation_url": "https://developer.github.com/v3"
-                }
-            )
-            resp.status_code = 404
-            return resp
+                })
+                resp.status_code = 401
+                return resp
 
         sha = github_api.sha_origin
         return jsonify({

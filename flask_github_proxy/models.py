@@ -44,8 +44,8 @@ class ProxyError(object):
 
     :param code: HTTP Code Error
     :type code: int
-    :param message: Message to display
-    :type message: str
+    :param message: Message to display or a dict and its key
+    :type message: str or tuple
 
     :ivar code: HTTP Code Error
     :ivar message: Message to display
@@ -54,6 +54,15 @@ class ProxyError(object):
     def __init__(self, code, message):
         self.code = code
         self.message = message
+
+        if isinstance(message, tuple):
+            # This way to work prevents failure if there is a huge issue on Github side or there is a change in API
+            # errors displaying
+            dic, key = message
+            if key in dic:
+                self.message = dic[key]
+            else:
+                self.message = dic
 
     @staticmethod
     def AdvancedJsonify(data, status_code):

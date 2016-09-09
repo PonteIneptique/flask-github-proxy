@@ -15,6 +15,16 @@ def make_secret(data, secret):
     return sha256(bytes("{}{}".format(data, secret), 'utf8')).hexdigest()
 
 
+def response_read(response):
+    """ Read a response, returns data and status code
+
+    :param response: Flask Response / Request Response
+    :return: Decoded Json and Status Code
+    :rtype: (dict, int)
+    """
+    return json.loads(response.data.decode("utf-8")), response.status_code
+
+
 class TestIntegration(TestCase):
 
     def setUp(self):
@@ -216,3 +226,104 @@ class TestIntegration(TestCase):
             json.loads(result.data.decode("utf-8"))["pr_url"], "https://github.com/perseusDL/dummy/pull/9",
             "Test should create the PR and returns its url"
         )
+
+    def test_error_content_missing(self):
+        """ Test error on missing content
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
+        result = self.makeRequest(
+            b"",
+            make_secret(base64.encodebytes(b'').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Content is missing', 'status': 'error'},
+            "Explain error when content is missing"
+        )
+        self.assertEqual(http, 300, "300 is the http code for content missing")
+
+    def test_error_content_sha_is_wrong(self):
+        """ Test that wrong secure would fail
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
+        result = self.makeRequest(
+            b"Encoded Content",
+            make_secret(base64.encodebytes(b'Not the right sha').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Hash does not correspond with content', 'status': 'error'},
+            "Explain error when hash is wrong"
+        )
+        self.assertEqual(http, 300, "300 is the http code when hash is wrong")
+
+    def test_error_get_ref_failure(self):
+        """ Test that github api check ref fails does not break API
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+        ] = 500
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "auithor_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Bad credentials', 'status': 'error'},
+            "Error message should be carried by ProxyError in Ref Failure"
+        )
+        self.assertEqual(http, 401, "Status code should be carried by ProxyError")
+
+    def test_error_make_ref_failure(self):
+        """ Test that github api make ref fails does not break API
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
+        # We need to make checking the ref fail first (because the branch should not exist to trigger creation)
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+        ] = True
+        # And then make creating fail
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs"
+        ] = True
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "auithor_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Not Found', 'status': 'error'},
+            "Error message should be carried by ProxyError in Ref Creation Failure"
+        )
+        self.assertEqual(http, 404, "Status code should be carried by ProxyError")

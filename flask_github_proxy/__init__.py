@@ -205,8 +205,8 @@ class GithubProxy(object):
             file.pushed = True
             return file
         else:
-            reply = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, reply["message"])
+            decoded_data = json.loads(data.content.decode("utf-8"))
+            return ProxyError(data.status_code, (decoded_data, "message"))
 
     def get(self, file):
         """ Check on github if a file exists
@@ -233,8 +233,8 @@ class GithubProxy(object):
         elif data.status_code == 404:
             pass
         else:
-            data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, data["message"])
+            decoded_data = json.loads(data.content.decode("utf-8"))
+            return ProxyError(data.status_code, (decoded_data, "message"))
         return file
 
     def update(self, file):
@@ -263,7 +263,7 @@ class GithubProxy(object):
             return file
         else:
             reply = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, reply["message"])
+            return ProxyError(data.status_code, (reply, "message"))
 
     def pull_request(self, file):
         """ Create a pull request
@@ -316,8 +316,8 @@ class GithubProxy(object):
         elif data.status_code == 404:
             return False
         else:
-            data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, data["message"])
+            decoded_data = json.loads(data.content.decode("utf-8"))
+            return ProxyError(data.status_code, (decoded_data, "message"))
 
     def make_ref(self, branch):
         """ Make a branch on github
@@ -348,12 +348,12 @@ class GithubProxy(object):
             data = json.loads(data.content.decode("utf-8"))
             if isinstance(data, list):
                 # No addresses matches, we get search results which stars with {branch}
-                return False
+                return ProxyError(404, "An error occurred during branch creation : got a list instead of one branch")
             #  Otherwise, we get one record
             return data["object"]["sha"]
         else:
-            answer = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, answer["message"])
+            decoded_data = json.loads(data.content.decode("utf-8"))
+            return ProxyError(data.status_code, (decoded_data, "message"))
 
     def check_sha(self, sha, content):
         """ Check sent sha against the salted hash of the content
@@ -375,6 +375,8 @@ class GithubProxy(object):
             - Update/Create content
             - Open Pull Request
             - Return PR link to Perseids
+
+        It can take a "branch" URI parameter for the name of the branch
 
         :param filename: Path for the file
         :return: JSON Response with status_code 201 if successful.
