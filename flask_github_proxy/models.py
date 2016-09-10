@@ -151,7 +151,7 @@ class File(object):
 
     @property
     def sha(self):
-        return sha256(self.base64).hexdigest()
+        return sha256(self.content).hexdigest()
 
     @property
     def base64(self):

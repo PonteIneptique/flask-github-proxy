@@ -328,6 +328,37 @@ class TestIntegration(TestCase):
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
 
+    def test_fail_get_upstream_ref(self):
+        """ Test when getting the file fails
+        """
+        self.proxy.__default_branch__ = GithubProxy.DEFAULT_BRANCH.AUTO_SHA
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = False
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+        ] = "master_ref"
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/master"
+        ] = "master_ref"
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'The default branch from which to checkout is either not available or does not exist',
+                   'status': 'error', "step": "make_ref"},
+            "Error message should be carried by ProxyError in Check Reference Failure"
+        )
+        self.assertEqual(http, 404, "Status code should be produced by ProxyError")
+
     def test_fail_get_file(self):
         """ Test when getting the file fails
         """
@@ -431,3 +462,92 @@ class TestIntegration(TestCase):
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
 
+    def test_default_branch(self):
+        self.proxy.__default_branch__ = "default_branch"
+
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com"
+            }
+        )
+        data, http = response_read(result)
+        self.assertIn(
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/default_branch", self.calls.keys(),
+            "Assert we check for the default_branch"
+        )
+
+        # Second step : we check with creation
+        self.calls.clear()
+        self.proxy.__default_branch__ = "default_branch2"
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/default_branch2"
+        ] = True
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com"
+            }
+        )
+        data, http = response_read(result)
+        self.assertIn(
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/default_branch2", self.calls.keys(),
+            "Assert we check for the default_branch"
+        )
+        self.assertEqual(
+            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]), {"ref": "refs/heads/default_branch2", "sha": "123456"},
+            "Assert we create for the default_branch2"
+        )
+
+    def test_default_branch_filesha(self):
+        self.proxy.__default_branch__ = GithubProxy.DEFAULT_BRANCH.AUTO_SHA
+
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com"
+            }
+        )
+        data, http = response_read(result)
+        self.assertIn(
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/9c6609fc", self.calls.keys(),
+            "Assert we check for the default_branch"
+        )
+
+        # Second step : we check with creation
+        self.calls.clear()
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/9c6609fc"
+        ] = True
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com"
+            }
+        )
+        data, http = response_read(result)
+        self.assertIn(
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/9c6609fc", self.calls.keys(),
+            "Assert we check for the default_branch"
+        )
+        self.assertEqual(
+            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]),
+            {"ref": "refs/heads/9c6609fc", "sha": "123456"},
+            "Assert we create for the default_branch2"
+        )

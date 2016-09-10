@@ -124,7 +124,7 @@ class GithubProxy(object):
         elif self.__default_branch__ == GithubProxy.DEFAULT_BRANCH.NO:
             return self.origin_branch
         else:
-            return file.sha
+            return file.sha[:8]
 
     @property
     def blueprint(self):

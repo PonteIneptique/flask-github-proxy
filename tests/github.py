@@ -12,6 +12,7 @@ def make_client(token, route_fail=None):
     github_api.new_sha = "abcdef"
     github_api.pr_number = 9
     github_api.exist_file = defaultdict(lambda: False)
+    github_api.calls = 0
     if not route_fail:
         github_api.route_fail = {}
 
@@ -70,6 +71,43 @@ def make_client(token, route_fail=None):
                 )
                 resp.status_code = 404
                 return resp
+            elif github_api.route_fail[r] == "master_ref":
+                github_api.calls += 1
+                if github_api.calls == 1:
+                    # First call : we say the wished branch does not exist
+                    resp = jsonify({
+                        "message": "Not Found",
+                        "documentation_url": "https://developer.github.com/v3"
+                    }
+                    )
+                    resp.status_code = 404
+                    return resp
+                elif github_api.calls == 2:
+                    # We need to check for two calls because that's the second call we are looking for :
+                    # the one which gets the sha of master_ref
+                    resp = jsonify([
+                          {
+                            "ref": "refs/heads/feature-a",
+                            "url": "https://api.github.com/repos/octocat/Hello-World/git/refs/heads/feature-a",
+                            "object": {
+                              "type": "commit",
+                              "sha": "aa218f56b14c9653891f9e74264a383fa43fefbd",
+                              "url": "https://api.github.com/repos/octocat/Hello-World/git/commits/aa218f56b14c9653891f9e74264a383fa43fefbd"
+                            }
+                          },
+                          {
+                            "ref": "refs/heads/feature-b",
+                            "url": "https://api.github.com/repos/octocat/Hello-World/git/refs/heads/feature-b",
+                            "object": {
+                              "type": "commit",
+                              "sha": "612077ae6dffb4d2fbd8ce0cccaa58893b07b5ac",
+                              "url": "https://api.github.com/repos/octocat/Hello-World/git/commits/612077ae6dffb4d2fbd8ce0cccaa58893b07b5ac"
+                            }
+                          }
+                        ]
+                    )
+                    resp.status_code = 200
+                    return resp
             else:
                 # Used to detect failing on  GitHub API side
 
