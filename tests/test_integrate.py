@@ -292,7 +292,7 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertEqual(
-            data, {'message': 'Bad credentials', 'status': 'error'},
+            data, {'message': 'Bad credentials', 'status': 'error', 'step': 'get_ref'},
             "Error message should be carried by ProxyError in Ref Failure"
         )
         self.assertEqual(http, 401, "Status code should be carried by ProxyError")
@@ -323,7 +323,7 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertEqual(
-            data, {'message': 'Not Found', 'status': 'error'},
+            data, {'message': 'Not Found', 'status': 'error', 'step': 'make_ref'},
             "Error message should be carried by ProxyError in Ref Creation Failure"
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
@@ -379,3 +379,55 @@ class TestIntegration(TestCase):
             "Error message should be carried by ProxyError in Put Failure"
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
+
+    def test_fail_update_file(self):
+        """ Test when update the file fails
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.exist_file["path/to/some/file.xml"] = True
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/contents/path/to/some/file.xml"
+        ] = 500
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Not Found', 'status': 'error', 'step': 'update'},
+            "Error message should be carried by ProxyError in Update File Failure"
+        )
+        self.assertEqual(http, 404, "Status code should be carried by ProxyError")
+
+    def test_fail_pull_request(self):
+        """ Test when pull request the file fails
+        """
+        self.github_api.sha_origin = "789456"
+        self.github_api.route_fail[
+            "http://localhost/repos/perseusDL/dummy/pulls"
+        ] = 500
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": "ponteineptique",
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com",
+                "branch": "uuid-1234"
+            }
+        )
+        data, http = response_read(result)
+        self.assertEqual(
+            data, {'message': 'Not Found', 'status': 'error', 'step': 'pull_request'},
+            "Error message should be carried by ProxyError in Pull Request Failure"
+        )
+        self.assertEqual(http, 404, "Status code should be carried by ProxyError")
+

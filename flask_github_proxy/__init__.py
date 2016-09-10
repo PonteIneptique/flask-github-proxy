@@ -192,15 +192,12 @@ class GithubProxy(object):
             "content": file.base64,
             "branch": file.branch
         }
-        data = self.request(
-            "PUT",
-            "{api}/repos/{origin}/contents/{path}".format(
-                api=self.github_api_url,
-                origin=self.origin,
-                path=file.path
-            ),
-            data=input_
+        uri = "{api}/repos/{origin}/contents/{path}".format(
+            api=self.github_api_url,
+            origin=self.origin,
+            path=file.path
         )
+        data = self.request("PUT", uri, data=input_)
 
         if data.status_code == 201:
             file.pushed = True
@@ -209,7 +206,10 @@ class GithubProxy(object):
             decoded_data = json.loads(data.content.decode("utf-8"))
             return ProxyError(
                 data.status_code, (decoded_data, "message"),
-                step="put", context=input_
+                step="put", context={
+                    "uri": uri,
+                    "params": input_
+                }
             )
 
     def get(self, file):
@@ -251,27 +251,31 @@ class GithubProxy(object):
         :param file: File to update, with its content
         :return: File with new information, including success (or Error)
         """
-        data = self.request(
-            "PUT",
-            "{api}/repos/{origin}/contents/{path}".format(
-                api=self.github_api_url,
-                origin=self.origin,
-                path=file.path
-            ),
-            data={
-                "message": file.logs,
-                "author": file.author.dict(),
-                "content": file.base64,
-                "sha": file.blob,
-                "branch": file.branch
-            }
+        params = {
+            "message": file.logs,
+            "author": file.author.dict(),
+            "content": file.base64,
+            "sha": file.blob,
+            "branch": file.branch
+        }
+        uri = "{api}/repos/{origin}/contents/{path}".format(
+            api=self.github_api_url,
+            origin=self.origin,
+            path=file.path
         )
+        data = self.request("PUT", uri, data=params)
         if data.status_code == 200:
             file.pushed = True
             return file
         else:
             reply = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, (reply, "message"))
+            return ProxyError(
+                data.status_code, (reply, "message"),
+                step="update", context={
+                    "uri": uri,
+                    "params": params
+                }
+            )
 
     def pull_request(self, file):
         """ Create a pull request
@@ -279,26 +283,30 @@ class GithubProxy(object):
         :param file: File to push through pull request
         :return: URL of the PullRequest or Proxy Error
         """
-        data = self.request(
-            "POST",
-            "{api}/repos/{upstream}/pulls".format(
-                api=self.github_api_url,
-                upstream=self.upstream,
-                path=file.path
-            ),
-            data={
-              "title": "[Proxy] {message}".format(message=file.logs),
-              "body": "",
-              "head": "{origin}:{branch}".format(origin=self.origin.split("/")[0], branch=file.branch),
-              "base": self.origin_branch
-            }
+        uri = "{api}/repos/{upstream}/pulls".format(
+            api=self.github_api_url,
+            upstream=self.upstream,
+            path=file.path
         )
+        params = {
+          "title": "[Proxy] {message}".format(message=file.logs),
+          "body": "",
+          "head": "{origin}:{branch}".format(origin=self.origin.split("/")[0], branch=file.branch),
+          "base": self.origin_branch
+        }
+        data = self.request("POST", uri, data=params)
 
         if data.status_code == 201:
             return json.loads(data.content.decode("utf-8"))["html_url"]
         else:
             reply = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, reply["message"])
+            return ProxyError(
+                data.status_code, reply["message"],
+                step="pull_request", context={
+                    "uri": uri,
+                    "params": params
+                }
+            )
 
     def get_ref(self, branch):
         """ Check if a reference exists
@@ -306,14 +314,12 @@ class GithubProxy(object):
         :param branch: The branch to check if it exists
         :return: Sha of the branch if it exists, False if it does not exist, ProxyError if it went wrong
         """
-        data = self.request(
-            "GET",
-            "{api}/repos/{origin}/git/refs/heads/{branch}".format(
-                api=self.github_api_url,
-                origin=self.origin,
-                branch=branch
-            )
+        uri = "{api}/repos/{origin}/git/refs/heads/{branch}".format(
+            api=self.github_api_url,
+            origin=self.origin,
+            branch=branch
         )
+        data = self.request("GET", uri)
         if data.status_code == 200:
             data = json.loads(data.content.decode("utf-8"))
             if isinstance(data, list):
@@ -325,7 +331,12 @@ class GithubProxy(object):
             return False
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, (decoded_data, "message"))
+            return ProxyError(
+                data.status_code, (decoded_data, "message"),
+                step="get_ref", context={
+                    "uri": uri
+                }
+            )
 
     def make_ref(self, branch):
         """ Make a branch on github
@@ -337,27 +348,32 @@ class GithubProxy(object):
         if not isinstance(master_sha, str):
             return ProxyError(
                 404,
-                "The default branch from which to checkout is either not available or does not exist"
+                "The default branch from which to checkout is either not available or does not exist",
+                step="make_ref"
             )
 
-        data = self.request(
-            "POST",
-            "{api}/repos/{origin}/git/refs".format(
-                api=self.github_api_url,
-                origin=self.origin
-            ),
-            data={
-              "ref": "refs/heads/{branch}".format(branch=branch),
-              "sha": master_sha
-            }
+        params = {
+          "ref": "refs/heads/{branch}".format(branch=branch),
+          "sha": master_sha
+        }
+        uri = "{api}/repos/{origin}/git/refs".format(
+            api=self.github_api_url,
+            origin=self.origin
         )
+        data = self.request("POST", uri, data=params)
 
         if data.status_code == 201:
             data = json.loads(data.content.decode("utf-8"))
             return data["object"]["sha"]
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(data.status_code, (decoded_data, "message"))
+            return ProxyError(
+                data.status_code, (decoded_data, "message"),
+                step="make_ref", context={
+                    "uri": uri,
+                    "params": params
+                }
+            )
 
     def check_sha(self, sha, content):
         """ Check sent sha against the salted hash of the content
