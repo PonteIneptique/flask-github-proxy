@@ -8,7 +8,7 @@ setup(
     license='GNU GPL',
     author='Thibault Clerice',
     author_email='leponteineptique@gmail.com',
-    description=""" Plugin to build services to push data from a website to github through PullRequests
+    description=""" Plugin to build services to push data from a website to github with PullRequests confirmation
     """,
     test_suite="tests",
     install_requires=[
@@ -17,5 +17,16 @@ setup(
         "requests==2.10.0",
     ],
     include_package_data=True,
-    zip_safe=False
+    zip_safe=False,
+    classifiers=[
+        "Development Status :: 5 - Production/Stable",
+        "Framework :: Flask"
+        "Intended Audience :: Developers",
+        "Intended Audience :: Information Technology",
+        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+        "Programming Language :: Python :: 3.5",
+        "Topic :: Documentation :: Sphinx",
+        "Topic :: Internet :: Proxy Servers"
+
+    ]
 )
