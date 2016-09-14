@@ -9,6 +9,7 @@ def make_client(token, route_fail=None):
     github_api.token = token
     github_api.route_fail = route_fail
     github_api.sha_origin = "123456"
+    github_api.sha_fork = "90e7fe4625c1e7a2cbb0d6384ec06d27a1f52c03"
     github_api.new_sha = "abcdef"
     github_api.pr_number = 9
     github_api.exist_file = defaultdict(lambda: False)
@@ -108,6 +109,8 @@ def make_client(token, route_fail=None):
                     )
                     resp.status_code = 200
                     return resp
+            elif github_api.route_fail[r] == "patch":
+                pass
             else:
                 # Used to detect failing on  GitHub API side
 
@@ -118,7 +121,10 @@ def make_client(token, route_fail=None):
                 resp.status_code = 401
                 return resp
 
-        sha = github_api.sha_origin
+        if owner == "ponteineptique":
+            sha = github_api.sha_origin
+        else:
+            sha = github_api.sha_fork
         return jsonify({
           "ref": "refs/heads/{branch}".format(branch=branch),
           "url": "https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}".format(
@@ -372,5 +378,39 @@ def make_client(token, route_fail=None):
         })
         reply.status_code = 201
         return reply
+
+    @github_api.route("/repos/<owner>/<repo>/git/refs/heads/<branch>", methods=["PATCH"])
+    def patch_ref(owner, repo, branch):
+        r = request.url.split("?")[0]
+        if r in github_api.route_fail.keys() and github_api.route_fail[r] == "patch":
+            # Used when we want to make a branch creation
+            resp = jsonify({
+                    "message": "Not Found",
+                    "documentation_url": "https://developer.github.com/v3"
+                }
+            )
+            resp.status_code = 404
+            return resp
+
+        sha = github_api.sha_origin
+        data = json.loads(request.data.decode("utf-8"))
+
+        return jsonify({
+          "ref": "refs/heads/{branch}",
+          "url": "https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}".format(
+              repo=repo,
+              owner=owner,
+              branch=branch
+          ),
+          "object": {
+            "type": "commit",
+            "sha": github_api.sha_fork,
+            "url": "https://api.github.com/repos/{owner}/{repo}/git/commits/{sha}".format(
+              repo=repo,
+              owner=owner,
+              sha=data["sha"]
+            )
+          }
+        })
 
     return github_api
