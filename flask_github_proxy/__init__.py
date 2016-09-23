@@ -24,7 +24,9 @@ class GithubProxy(object):
     :param token: Github Authentification User Token
     :param default_branch: Default Branch to push to
     :type default_branch: str
-    :param origin_branch: Origin Branch to build on
+    :param pull_req: Origin Branch to build on
+    :param master_fork: Origin Repository Master Branch Name (Branch to update on the fork using the finale repositoru)
+    :param master_upstream: Upstream Repository Master Branch Name (Branch to Pull Request to)
     :param app: Flask Application to connect to
     :param default_author: Default Author for Commit and Modification
 
@@ -44,6 +46,7 @@ class GithubProxy(object):
 
     URLS = [
         ("/push/<path:filename>", "r_receive", ["POST"]),
+        ("/update", "r_update", ["GET"]),
         ("/", "r_main", ["GET"])
     ]
 
@@ -64,7 +67,7 @@ class GithubProxy(object):
     def __init__(self,
                  prefix, origin, upstream,
                  secret, token,
-                 default_branch=None, origin_branch="master",
+                 default_branch=None, master_upstream="master", master_fork="master",
                  app=None, default_author=None):
 
         self.__blueprint__ = None
@@ -78,7 +81,9 @@ class GithubProxy(object):
         self.__default_branch__ = default_branch
         self.__token__ = token
 
-        self.origin_branch = origin_branch
+        self.master_upstream = master_upstream
+        self.master_fork = master_fork
+
         if default_branch is None:
             self.__default_branch__ = GithubProxy.DEFAULT_BRANCH.NO
 
@@ -122,7 +127,7 @@ class GithubProxy(object):
         if isinstance(self.__default_branch__, str):
             return self.__default_branch__
         elif self.__default_branch__ == GithubProxy.DEFAULT_BRANCH.NO:
-            return self.origin_branch
+            return self.master_upstream
         else:
             return file.sha[:8]
 
@@ -292,7 +297,7 @@ class GithubProxy(object):
           "title": "[Proxy] {message}".format(message=file.logs),
           "body": "",
           "head": "{origin}:{branch}".format(origin=self.origin.split("/")[0], branch=file.branch),
-          "base": self.origin_branch
+          "base": self.master_upstream
         }
         data = self.request("POST", uri, data=params)
 
@@ -308,15 +313,17 @@ class GithubProxy(object):
                 }
             )
 
-    def get_ref(self, branch):
+    def get_ref(self, branch, origin=None):
         """ Check if a reference exists
 
         :param branch: The branch to check if it exists
         :return: Sha of the branch if it exists, False if it does not exist, ProxyError if it went wrong
         """
+        if not origin:
+            origin = self.origin
         uri = "{api}/repos/{origin}/git/refs/heads/{branch}".format(
             api=self.github_api_url,
-            origin=self.origin,
+            origin=origin,
             branch=branch
         )
         data = self.request("GET", uri)
@@ -344,7 +351,7 @@ class GithubProxy(object):
         :param branch: Name of the branch to create
         :return: Sha of the branch or ProxyError
         """
-        master_sha = self.get_ref(self.origin_branch)
+        master_sha = self.get_ref(self.master_upstream)
         if not isinstance(master_sha, str):
             return ProxyError(
                 404,
@@ -384,6 +391,42 @@ class GithubProxy(object):
         """
         rightful_sha = sha256(bytes("{}{}".format(content, self.secret), "utf-8")).hexdigest()
         return sha == rightful_sha
+
+    def patch_ref(self, sha):
+        """ Patch reference on the origin master branch
+
+        :param sha: Sha to use for the branch
+        :return: Status of success
+        :rtype: str or ProxyError
+        """
+        uri = "{api}/repos/{origin}/git/refs/heads/{branch}".format(
+            api=self.github_api_url,
+            origin=self.origin,
+            branch=self.master_fork
+        )
+        data = {
+            "sha": sha,
+            "force": True
+        }
+        reply = self.request(
+            "PATCH",
+            uri,
+            data=data
+        )
+        if reply.status_code == 200:
+            dic = json.loads(reply.content.decode("utf-8"))
+            return dic["object"]["sha"]
+        else:
+            dic = json.loads(reply.content.decode("utf-8"))
+            return ProxyError(
+                reply.status_code,
+                (dic, "message"),
+                step="patch",
+                context={
+                    "uri": uri,
+                    "data": data
+                }
+            )
 
     def r_receive(self, filename):
         """ Function which receives the data from Perseids
@@ -489,6 +532,43 @@ class GithubProxy(object):
         data = jsonify(reply)
         data.status_code = 201
         return data
+
+    def r_update(self):
+        """ Function which receives the data from Perseids
+
+            - Check the branch does not exist
+            - Make the branch if needed
+            - Receive PUT from Perseids
+            - Check if content exist
+            - Update/Create content
+            - Open Pull Request
+            - Return PR link to Perseids
+
+        It can take a "branch" URI parameter for the name of the branch
+
+        :param filename: Path for the file
+        :return: JSON Response with status_code 201 if successful.
+        """
+
+        # Getting Master Branch
+        upstream = self.get_ref(self.master_upstream, origin=self.upstream)
+        if isinstance(upstream, bool):
+            return (ProxyError(
+                404, "Upstream Master branch '{0}' does not exist".format(self.master_upstream),
+                step="get_upstream_ref"
+            )).response()
+        elif isinstance(upstream, ProxyError):
+            return upstream.response()
+
+        # Patching
+        new_sha = self.patch_ref(upstream)
+        if isinstance(new_sha, ProxyError):
+            return new_sha.response()
+
+        return jsonify({
+            "status": "success",
+            "commit": new_sha
+        })
 
     def r_main(self):
         """ Main Route of the API

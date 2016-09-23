@@ -6,7 +6,7 @@ from unittest import TestCase
 from flask import Flask
 import mock
 from hashlib import sha256
-from .github import make_client
+from tests.github import make_client
 import base64
 import json
 
