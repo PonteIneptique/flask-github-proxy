@@ -86,7 +86,7 @@ class TestIntegration(TestCase):
         """
         # The Branch does not exist
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/b'uuid-1234'"
         ] = True
         # The file exist
         self.github_api.exist_file["path/to/some/file.xml"] = True
@@ -104,7 +104,7 @@ class TestIntegration(TestCase):
         )
 
         self.assertIn(
-            'GET::/repos/ponteineptique/dummy/git/refs/heads/uuid-1234', self.calls.keys(),
+            'GET::/repos/ponteineptique/dummy/git/refs/heads/b\'uuid-1234\'', self.calls.keys(),
             "It should check if the branch exists"
         )
         self.assertIn(
@@ -117,7 +117,7 @@ class TestIntegration(TestCase):
         )
         self.assertEqual(
             json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]),
-            {'ref': 'refs/heads/uuid-1234', 'sha': '123456'},
+            {'ref': 'refs/heads/b\'uuid-1234\'', 'sha': '123456'},
             "Data pushed should reference to the new branch"
         )
         self.assertIn(
@@ -140,7 +140,7 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                "branch": "uuid-1234",
+                "branch": "b'uuid-1234'",
                 "sha": '123456'
             },
             put_data
@@ -151,7 +151,7 @@ class TestIntegration(TestCase):
         )
         pr = json.loads(self.calls["POST::/repos/perseusDL/dummy/pulls"]["data"])
         self.assertEqual(
-            (pr["head"], pr["base"]), ("ponteineptique:uuid-1234", "master"),
+            (pr["head"], pr["base"]), ("ponteineptique:b'uuid-1234'", "master"),
             "Origin and upstream should be well set up"
         )
         self.assertEqual(
@@ -178,7 +178,7 @@ class TestIntegration(TestCase):
             }
         )
         self.assertIn(
-            'GET::/repos/ponteineptique/dummy/git/refs/heads/uuid-1234', self.calls.keys(),
+            'GET::/repos/ponteineptique/dummy/git/refs/heads/b\'uuid-1234\'', self.calls.keys(),
             "It should check if the branch exists"
         )
         self.assertNotIn(
@@ -205,7 +205,7 @@ class TestIntegration(TestCase):
                 },
                 "content": b"Some content",
                 "message": "Hard work of transcribing file",
-                "branch": "uuid-1234"
+                "branch": "b'uuid-1234'"
             },
             put_data,
             "It should post the right data as well as the right sha for the branch"
@@ -216,7 +216,7 @@ class TestIntegration(TestCase):
         )
         pr = json.loads(self.calls["POST::/repos/perseusDL/dummy/pulls"]["data"])
         self.assertEqual(
-            (pr["head"], pr["base"]), ("ponteineptique:uuid-1234", "master"),
+            (pr["head"], pr["base"]), ("ponteineptique:b'uuid-1234'", "master"),
             "Origin and upstream should be well set up"
         )
         self.assertEqual(
@@ -239,7 +239,7 @@ class TestIntegration(TestCase):
                 "author_name": "ponteineptique",
                 "date": "19/06/2016",
                 "logs": "Hard work of transcribing file",
-                "branch": "uuid-1234"
+                "branch": "b'uuid-1234'"
             }
         )
         data, http = response_read(result)
@@ -277,7 +277,7 @@ class TestIntegration(TestCase):
         self.github_api.sha_origin = "789456"
         self.github_api.exist_file["path/to/some/file.xml"] = False
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/b'uuid-1234'"
         ] = 500
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
@@ -304,7 +304,7 @@ class TestIntegration(TestCase):
         self.github_api.exist_file["path/to/some/file.xml"] = False
         # We need to make checking the ref fail first (because the branch should not exist to trigger creation)
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/b'uuid-1234'"
         ] = True
         # And then make creating fail
         self.github_api.route_fail[
@@ -335,7 +335,7 @@ class TestIntegration(TestCase):
         self.github_api.sha_origin = "789456"
         self.github_api.exist_file["path/to/some/file.xml"] = False
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/uuid-1234"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/b'uuid-1234'"
         ] = "master_ref"
         self.github_api.route_fail[
             "http://localhost/repos/ponteineptique/dummy/git/refs/heads/master"
@@ -477,7 +477,7 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertIn(
-            "GET::/repos/ponteineptique/dummy/git/refs/heads/default_branch", self.calls.keys(),
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/b'default_branch'", self.calls.keys(),
             "Assert we check for the default_branch"
         )
 
@@ -485,7 +485,7 @@ class TestIntegration(TestCase):
         self.calls.clear()
         self.proxy.__default_branch__ = "default_branch2"
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/default_branch2"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/b'default_branch2'"
         ] = True
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
@@ -499,11 +499,13 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertIn(
-            "GET::/repos/ponteineptique/dummy/git/refs/heads/default_branch2", self.calls.keys(),
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/b'default_branch2'", self.calls.keys(),
             "Assert we check for the default_branch"
         )
+        print("KEYS" )
+        print(str(self.calls))
         self.assertEqual(
-            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]), {"ref": "refs/heads/default_branch2", "sha": "123456"},
+            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]), {"ref": "refs/heads/b'default_branch2'", "sha": "123456"},
             "Assert we create for the default_branch2"
         )
 
@@ -522,14 +524,14 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertIn(
-            "GET::/repos/ponteineptique/dummy/git/refs/heads/9c6609fc", self.calls.keys(),
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/b'9c6609fc'", self.calls.keys(),
             "Assert we check for the default_branch"
         )
 
         # Second step : we check with creation
         self.calls.clear()
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/9c6609fc"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/b'9c6609fc'"
         ] = True
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
@@ -543,11 +545,11 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertIn(
-            "GET::/repos/ponteineptique/dummy/git/refs/heads/9c6609fc", self.calls.keys(),
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/b'9c6609fc'", self.calls.keys(),
             "Assert we check for the default_branch"
         )
         self.assertEqual(
             json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]),
-            {"ref": "refs/heads/9c6609fc", "sha": "123456"},
+            {"ref": "refs/heads/b'9c6609fc'", "sha": "123456"},
             "Assert we create for the default_branch2"
         )

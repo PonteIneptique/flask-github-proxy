@@ -482,7 +482,11 @@ class GithubProxy(object):
             date=date,
             logs=logs
         )
-        file.branch = request.args.get("branch", self.default_branch(file))
+        # the github api doesn't seem to support unicode encoded
+        # branch names consistently - it allows you to create them but
+        # not put to them, or else, I can't figure out how to get it 
+        # to put to them, so I'm stripping the chars for now
+        file.branch= str(bytes(request.args.get("branch", self.default_branch(file)),"utf-8").decode("utf-8").encode('ascii','ignore'))
 
         ###########################################
         # Ensuring branch exists
