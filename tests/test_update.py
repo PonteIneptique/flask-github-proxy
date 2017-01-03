@@ -76,7 +76,8 @@ class TestIntegrationUpdate(TestCase):
             headers={"fproxy-secure-hash": secure_sha}
         )
 
-    def test_route_github_update(self):
+    @mock.patch('logging.Logger.info')
+    def test_route_github_update(self, logger):
         """ Test a full file update routine
 
         The test occurs with creation of a new branch
@@ -104,6 +105,12 @@ class TestIntegrationUpdate(TestCase):
             {
                 "status": "success",
                 "commit": "90e7fe4625c1e7a2cbb0d6384ec06d27a1f52c03"
+            }
+        )
+        logger.assert_called_with(
+            "Updated repository ponteineptique/dummy to sha 90e7fe4625c1e7a2cbb0d6384ec06d27a1f52c03",
+            extra={
+                'former_sha': '90e7fe4625c1e7a2cbb0d6384ec06d27a1f52c03'
             }
         )
 

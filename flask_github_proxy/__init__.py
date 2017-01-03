@@ -5,6 +5,8 @@ import json
 from requests import request as make_request
 from flask_github_proxy.models import Author, File, ProxyError
 from hashlib import sha256
+import logging
+from pythonjsonlogger import jsonlogger
 
 
 class GithubProxy(object):
@@ -55,6 +57,8 @@ class GithubProxy(object):
         "anonymous@github.com"
     )
 
+    ProxyError = ProxyError
+
     class DEFAULT_BRANCH:
         """ Parameter Constant for the default_branch parameter
 
@@ -68,7 +72,7 @@ class GithubProxy(object):
                  prefix, origin, upstream,
                  secret, token,
                  default_branch=None, master_upstream="master", master_fork="master",
-                 app=None, default_author=None):
+                 app=None, default_author=None, logger=None, json_log_formatting=True):
 
         self.__blueprint__ = None
         self.__prefix__ = prefix
@@ -80,6 +84,16 @@ class GithubProxy(object):
         self.__default_author__ = default_author
         self.__default_branch__ = default_branch
         self.__token__ = token
+
+        self.logger = logger or logging.getLogger(__name__)
+        self.ProxyError.logger = self.logger
+
+        if json_log_formatting is True:
+            logHandler = logging.StreamHandler()
+            formatter = jsonlogger.JsonFormatter()
+            logHandler.setFormatter(formatter)
+            self.logger.addHandler(logHandler)
+            self.logger.setLevel(logging.DEBUG)
 
         self.master_upstream = master_upstream
         self.master_fork = master_fork
@@ -112,11 +126,19 @@ class GithubProxy(object):
             'Content-Type': 'application/json',
             'Authorization': 'token %s' % self.__token__,
         }
-        return make_request(
+        req = make_request(
             method,
             url,
             **kwargs
         )
+        self.logger.debug(
+            "Request::{}::{}".format(method, url),
+            extra={
+                "request": kwargs,
+                "response": {"headers": req.headers, "code": req.status_code, "data": req.content}
+            }
+        )
+        return req
 
     def default_branch(self, file):
         """ Decide the name of the default branch given the file and the configuration
@@ -189,7 +211,7 @@ class GithubProxy(object):
         """ Create a new file on github
 
         :param file: File to create
-        :return: File or ProxyError
+        :return: File or self.ProxyError
         """
         input_ = {
             "message": file.logs,
@@ -209,7 +231,7 @@ class GithubProxy(object):
             return file
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 data.status_code, (decoded_data, "message"),
                 step="put", context={
                     "uri": uri,
@@ -222,7 +244,7 @@ class GithubProxy(object):
 
         :param file: File to check status of
         :return: File with new information, including blob, or Error
-        :rtype: File or ProxyError
+        :rtype: File or self.ProxyError
         """
         uri = "{api}/repos/{origin}/contents/{path}".format(
             api=self.github_api_url,
@@ -241,7 +263,7 @@ class GithubProxy(object):
             pass
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 data.status_code, (decoded_data, "message"),
                 step="get", context={
                     "uri": uri,
@@ -274,7 +296,7 @@ class GithubProxy(object):
             return file
         else:
             reply = json.loads(data.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 data.status_code, (reply, "message"),
                 step="update", context={
                     "uri": uri,
@@ -305,7 +327,7 @@ class GithubProxy(object):
             return json.loads(data.content.decode("utf-8"))["html_url"]
         else:
             reply = json.loads(data.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 data.status_code, reply["message"],
                 step="pull_request", context={
                     "uri": uri,
@@ -317,7 +339,7 @@ class GithubProxy(object):
         """ Check if a reference exists
 
         :param branch: The branch to check if it exists
-        :return: Sha of the branch if it exists, False if it does not exist, ProxyError if it went wrong
+        :return: Sha of the branch if it exists, False if it does not exist, self.ProxyError if it went wrong
         """
         if not origin:
             origin = self.origin
@@ -338,7 +360,7 @@ class GithubProxy(object):
             return False
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 data.status_code, (decoded_data, "message"),
                 step="get_ref", context={
                     "uri": uri
@@ -349,11 +371,11 @@ class GithubProxy(object):
         """ Make a branch on github
 
         :param branch: Name of the branch to create
-        :return: Sha of the branch or ProxyError
+        :return: Sha of the branch or self.ProxyError
         """
         master_sha = self.get_ref(self.master_upstream)
         if not isinstance(master_sha, str):
-            return ProxyError(
+            return self.ProxyError(
                 404,
                 "The default branch from which to checkout is either not available or does not exist",
                 step="make_ref"
@@ -374,7 +396,7 @@ class GithubProxy(object):
             return data["object"]["sha"]
         else:
             decoded_data = json.loads(data.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 data.status_code, (decoded_data, "message"),
                 step="make_ref", context={
                     "uri": uri,
@@ -397,7 +419,7 @@ class GithubProxy(object):
 
         :param sha: Sha to use for the branch
         :return: Status of success
-        :rtype: str or ProxyError
+        :rtype: str or self.ProxyError
         """
         uri = "{api}/repos/{origin}/git/refs/heads/{branch}".format(
             api=self.github_api_url,
@@ -418,7 +440,7 @@ class GithubProxy(object):
             return dic["object"]["sha"]
         else:
             dic = json.loads(reply.content.decode("utf-8"))
-            return ProxyError(
+            return self.ProxyError(
                 reply.status_code,
                 (dic, "message"),
                 step="patch",
@@ -448,10 +470,9 @@ class GithubProxy(object):
         # Retrieving data
         ###########################################
         content = request.data.decode("utf-8")
-
         # Content checking
         if not content:
-            error = ProxyError(300, "Content is missing")
+            error = self.ProxyError(300, "Content is missing")
             return error.response()
 
         author_name = request.args.get("author_name", self.default_author.name)
@@ -461,6 +482,8 @@ class GithubProxy(object):
         date = request.args.get("date", datetime.datetime.now().date().isoformat())
         logs = request.args.get("logs", "{} updated {}".format(author.name, filename))
 
+        self.logger.info("Receiving query from {}".format(author_name), extra={"IP": request.remote_addr})
+
         ###########################################
         # Checking data security
         ###########################################
@@ -469,7 +492,7 @@ class GithubProxy(object):
             secure_sha = request.headers["fproxy-secure-hash"]
 
         if not secure_sha or not self.check_sha(secure_sha, content):
-            error = ProxyError(300, "Hash does not correspond with content")
+            error = self.ProxyError(300, "Hash does not correspond with content")
             return error.response()
 
         ###########################################
@@ -489,13 +512,13 @@ class GithubProxy(object):
         ###########################################
         branch_status = self.get_ref(file.branch)
 
-        if isinstance(branch_status, ProxyError):  # If we have an error from github API
+        if isinstance(branch_status, self.ProxyError):  # If we have an error from github API
             return branch_status.response()
         elif not branch_status:  # If it does not exist
             # We create a branch
             branch_status = self.make_ref(file.branch)
             # If branch creation did not work
-            if isinstance(branch_status, ProxyError):
+            if isinstance(branch_status, self.ProxyError):
                 return branch_status.response()
 
         ###########################################
@@ -504,7 +527,7 @@ class GithubProxy(object):
         # Check if file exists
         # It feeds file.blob parameter, which tells us the sha of the file if it exists
         file = self.get(file)
-        if isinstance(file, ProxyError):  # If we have an error from github API
+        if isinstance(file, self.ProxyError):  # If we have an error from github API
             return file.response()
 
         # If it has a blob set up, it means we can update given file
@@ -514,14 +537,14 @@ class GithubProxy(object):
         else:
             file = self.put(file)
 
-        if isinstance(file, ProxyError):
+        if isinstance(file, self.ProxyError):
             return file.response()
         ###########################################
         # Making pull request
         ###########################################
 
         pr_url = self.pull_request(file)
-        if isinstance(pr_url, ProxyError):
+        if isinstance(pr_url, self.ProxyError):
             return pr_url.response()
 
         reply = {
@@ -534,19 +557,12 @@ class GithubProxy(object):
         return data
 
     def r_update(self):
-        """ Function which receives the data from Perseids
+        """ Updates a fork Master
 
-            - Check the branch does not exist
-            - Make the branch if needed
-            - Receive PUT from Perseids
-            - Check if content exist
-            - Update/Create content
-            - Open Pull Request
-            - Return PR link to Perseids
+            - Check the ref of the origin repository
+            - Patch reference of fork repository
+            - Return status to Perseids
 
-        It can take a "branch" URI parameter for the name of the branch
-
-        :param filename: Path for the file
         :return: JSON Response with status_code 201 if successful.
         """
 
@@ -557,14 +573,15 @@ class GithubProxy(object):
                 404, "Upstream Master branch '{0}' does not exist".format(self.master_upstream),
                 step="get_upstream_ref"
             )).response()
-        elif isinstance(upstream, ProxyError):
+        elif isinstance(upstream, self.ProxyError):
             return upstream.response()
 
         # Patching
         new_sha = self.patch_ref(upstream)
-        if isinstance(new_sha, ProxyError):
+        if isinstance(new_sha, self.ProxyError):
             return new_sha.response()
 
+        self.logger.info("Updated repository {} to sha {}".format(self.origin, new_sha), extra={"former_sha": upstream})
         return jsonify({
             "status": "success",
             "commit": new_sha
