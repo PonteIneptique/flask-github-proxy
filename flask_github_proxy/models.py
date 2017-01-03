@@ -2,6 +2,7 @@ import base64
 from slugify import slugify
 from hashlib import sha256
 from flask import jsonify
+import logging
 
 
 class Author(object):
@@ -52,6 +53,8 @@ class ProxyError(object):
     :ivar message: Message to display
 
     """
+    LOGGER = logging.getLogger(__name__)
+
     def __init__(self, code, message, step=None, context=None):
         self.code = code
         self.message = message
@@ -95,6 +98,8 @@ class ProxyError(object):
         }
         if self.step:
             resp["step"] = self.step
+
+        self.LOGGER.error(self.message, extra={"step": self.step, "context": self.context})
         return callback(resp, status_code=self.code)
 
 

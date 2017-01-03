@@ -9,6 +9,7 @@ from hashlib import sha256
 from tests.github import make_client
 import base64
 import json
+import logging
 
 
 def make_secret(data, secret):
@@ -411,7 +412,8 @@ class TestIntegration(TestCase):
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
 
-    def test_fail_update_file(self):
+    @mock.patch('logging.Logger.debug')
+    def test_fail_update_file(self, logger):
         """ Test when update the file fails
         """
         self.github_api.sha_origin = "789456"
@@ -436,8 +438,13 @@ class TestIntegration(TestCase):
             "Error message should be carried by ProxyError in Update File Failure"
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
+        logger.assert_called_with("Request::PUT::/repos/ponteineptique/dummy/contents/path/to/some/file.xml", extra={
+            'response': mock.ANY,
+            'request': mock.ANY
+        })
 
-    def test_fail_pull_request(self):
+    @mock.patch('logging.Logger.error')
+    def test_fail_pull_request(self, logger):
         """ Test when pull request the file fails
         """
         self.github_api.sha_origin = "789456"
@@ -461,8 +468,19 @@ class TestIntegration(TestCase):
             "Error message should be carried by ProxyError in Pull Request Failure"
         )
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
+        logger.assert_called_with("Not Found", extra={
+            'step': 'pull_request',
+            'context': {
+                'params': {
+                    'base': 'master', 'body': '',
+                    'head': 'ponteineptique:uuid-1234', 'title': '[Proxy] Hard work of transcribing file'
+                },
+                'uri': '/repos/perseusDL/dummy/pulls'
+            }
+        })
 
-    def test_default_branch(self):
+    @mock.patch('logging.Logger.info')
+    def test_default_branch(self, logger):
         self.proxy.__default_branch__ = "default-branch"
 
         result = self.makeRequest(
@@ -480,7 +498,6 @@ class TestIntegration(TestCase):
             "GET::/repos/ponteineptique/dummy/git/refs/heads/default-branch", self.calls.keys(),
             "Assert we check for the default_branch"
         )
-
         # Second step : we check with creation
         self.calls.clear()
         self.proxy.__default_branch__ = "default-branch2"
@@ -506,6 +523,9 @@ class TestIntegration(TestCase):
             json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]), {"ref": "refs/heads/default-branch2", "sha": "123456"},
             "Assert we create for the default_branch2"
         )
+        logger.assert_called_with("Receiving query from ponteineptique", extra={
+            'IP': mock.ANY
+        })
 
     def test_default_branch_filesha(self):
         self.proxy.__default_branch__ = GithubProxy.DEFAULT_BRANCH.AUTO_SHA
