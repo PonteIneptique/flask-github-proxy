@@ -463,7 +463,7 @@ class TestIntegration(TestCase):
         self.assertEqual(http, 404, "Status code should be carried by ProxyError")
 
     def test_default_branch(self):
-        self.proxy.__default_branch__ = "default_branch"
+        self.proxy.__default_branch__ = "default-branch"
 
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
@@ -477,15 +477,15 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertIn(
-            "GET::/repos/ponteineptique/dummy/git/refs/heads/default_branch", self.calls.keys(),
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/default-branch", self.calls.keys(),
             "Assert we check for the default_branch"
         )
 
         # Second step : we check with creation
         self.calls.clear()
-        self.proxy.__default_branch__ = "default_branch2"
+        self.proxy.__default_branch__ = "default-branch2"
         self.github_api.route_fail[
-            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/default_branch2"
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/default-branch2"
         ] = True
         result = self.makeRequest(
             base64.encodebytes(b'Some content'),
@@ -499,11 +499,11 @@ class TestIntegration(TestCase):
         )
         data, http = response_read(result)
         self.assertIn(
-            "GET::/repos/ponteineptique/dummy/git/refs/heads/default_branch2", self.calls.keys(),
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/default-branch2", self.calls.keys(),
             "Assert we check for the default_branch"
         )
         self.assertEqual(
-            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]), {"ref": "refs/heads/default_branch2", "sha": "123456"},
+            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]), {"ref": "refs/heads/default-branch2", "sha": "123456"},
             "Assert we create for the default_branch2"
         )
 
@@ -550,4 +550,51 @@ class TestIntegration(TestCase):
             json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]),
             {"ref": "refs/heads/9c6609fc", "sha": "123456"},
             "Assert we create for the default_branch2"
+        )
+
+    def test_unicode_branch(self):
+        branch = "LauriMarjamäki"
+
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": branch,
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com",
+                "branch": "users/{}".format(branch)
+            }
+        )
+        data, http = response_read(result)
+        self.assertIn(
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/users-laurimarjamaki", self.calls.keys(),
+            "Assert we check for the default_branch"
+        )
+
+        # Second step : we check with creation
+        self.calls.clear()
+        self.github_api.route_fail[
+            "http://localhost/repos/ponteineptique/dummy/git/refs/heads/users-laurimarjamaki"
+        ] = True
+        result = self.makeRequest(
+            base64.encodebytes(b'Some content'),
+            make_secret(base64.encodebytes(b'Some content').decode("utf-8"), self.secret),
+            {
+                "author_name": branch,
+                "date": "19/06/2016",
+                "logs": "Hard work of transcribing file",
+                "author_email": "leponteineptique@gmail.com",
+                "branch": "users/{}".format(branch)
+            }
+        )
+        data, http = response_read(result)
+        self.assertIn(
+            "GET::/repos/ponteineptique/dummy/git/refs/heads/users-laurimarjamaki", self.calls.keys(),
+            "Assert we check for the default_branch"
+        )
+        self.assertEqual(
+            json.loads(self.calls["POST::/repos/ponteineptique/dummy/git/refs"]["data"]),
+            {"ref": "refs/heads/users-laurimarjamaki", "sha": "123456"},
+            "Assert we create for the branch users-laurimarjamaki"
         )
