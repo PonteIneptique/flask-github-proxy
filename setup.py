@@ -15,6 +15,7 @@ setup(
         "Flask==0.11.1",
         "GitHub-Flask==3.1.2",
         "requests==2.10.0",
+        "python-slugify==1.2.1"
     ],
     include_package_data=True,
     zip_safe=False,

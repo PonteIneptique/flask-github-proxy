@@ -1,4 +1,5 @@
 import base64
+from slugify import slugify
 from hashlib import sha256
 from flask import jsonify
 
@@ -127,7 +128,15 @@ class File(object):
         self.__logs__ = logs
         self.blob = None
         self.posted = False
-        self.branch = None
+        self.__branch__ = None
+
+    @property
+    def branch(self):
+        return self.__branch__
+
+    @branch.setter
+    def branch(self, value):
+        self.__branch__ = slugify(value)
 
     @property
     def path(self):
