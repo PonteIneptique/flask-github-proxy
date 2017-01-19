@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='flask_github_proxy',
-    version="0.0.1",
+    version="0.0.2",
     packages=find_packages(exclude=["examples", "tests"]),
     url='https://github.com/ponteineptique/flask-github-proxy',
     license='GNU GPL',
