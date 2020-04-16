@@ -14,7 +14,7 @@ setup(
     install_requires=[
         "Flask==0.11.1",
         "GitHub-Flask==3.1.2",
-        "requests==2.10.0",
+        "requests==2.20.0",
         "python-slugify==1.2.1",
         "python-json-logger==0.1.5"
     ],
