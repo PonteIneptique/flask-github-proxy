@@ -12,7 +12,7 @@ setup(
     """,
     test_suite="tests",
     install_requires=[
-        "Flask==0.11.1",
+        "Flask==1.0",
         "GitHub-Flask==3.1.2",
         "requests==2.20.0",
         "python-slugify==1.2.1",
